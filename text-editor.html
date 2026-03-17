@@ -1,0 +1,2093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Text Editor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      background: #F1E9DA;
+      display: flex; flex-direction: column; height: 100vh; color: #264F56;
+    }
+    .btn {
+      border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+      padding: 6px 14px; border-radius: 20px; transition: all .15s;
+      font-family: inherit;
+    }
+    .btn-ghost { background: #F1E9DA; color: #264F56; }
+    .btn-ghost:hover { background: #e8e3db; }
+    .btn-primary { background: #264F56; color: #F1E9DA; }
+    .btn-primary:hover { background: #1a3840; }
+
+
+    /* ── CONTROL BAR ── */
+    .controlbar {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+      padding: 10px 20px 12px; background: #fff;
+      border-bottom: 1px solid #e8e3db;
+    }
+    .ctrl-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
+    }
+
+    .controlbar textarea {
+      border: 1.5px solid #e8e3db; border-radius: 8px; padding: 5px 11px;
+      font-size: 13px; outline: none; background: #fafaf8;
+      color: #264F56; width: 200px; font-family: 'Caveat', cursive;
+      font-weight: 600; resize: vertical; min-height: 34px; max-height: 90px;
+      line-height: 1.4; vertical-align: top;
+    }
+    .controlbar textarea:focus { border-color: #264F56; }
+    .controlbar textarea::placeholder {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      font-weight: 400; font-size: 12px; color: #bbb;
+    }
+
+    .controlbar input[type="range"] {
+      accent-color: #264F56; width: 72px; cursor: pointer;
+    }
+
+    .ctrl-label {
+      font-size: 11px; font-weight: 600; color: #999; white-space: nowrap;
+    }
+
+    /* ── COLOR SWATCHES — mini post-it thumbnails ── */
+    .palette-group { display: flex; flex-direction: column; gap: 5px; }
+    .palette-tabs  { display: flex; gap: 3px; }
+    .palette-tab {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; white-space: nowrap;
+      padding: 3px 9px; border-radius: 10px; border: none;
+      background: transparent; color: #bbb; cursor: pointer;
+      font-family: inherit; transition: color .12s, background .12s;
+    }
+    .palette-tab:hover  { color: #264F56; }
+    .palette-tab.active { color: #264F56; background: rgba(38,79,86,0.10); }
+    .swatch-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .swatch {
+      width: 32px; height: 32px; border-radius: 3px; cursor: pointer;
+      border: 2px solid transparent;
+      box-shadow: 0 3px 7px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.06);
+      transition: transform .14s, box-shadow .14s;
+      flex-shrink: 0;
+      position: relative; overflow: hidden;
+    }
+    /* Separator line — mimics the note header rule */
+    .swatch::after {
+      content: '';
+      position: absolute;
+      top: 30%; left: 12%; right: 12%;
+      height: 1px;
+      background: rgba(0,0,0,0.18);
+      pointer-events: none;
+    }
+    .swatch:hover {
+      transform: scale(1.12) rotate(-2deg);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.26), 0 0 0 1px rgba(0,0,0,0.08);
+    }
+    .swatch.active {
+      border-color: #264F56;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.28), 0 0 0 2px #264F56;
+      transform: scale(1.06);
+    }
+
+
+    /* ── COLLAGE / OVERLAY TOGGLE ── */
+    .mode-toggle {
+      display: flex; align-items: center; gap: 0;
+      border: 1.5px solid #e8e3db; border-radius: 20px;
+      overflow: hidden; background: #f5f4f1;
+    }
+    .mode-toggle button {
+      border: none; cursor: pointer; font-size: 11px;
+      font-weight: 700; padding: 5px 11px;
+      background: transparent; color: #999;
+      transition: all .15s; font-family: inherit;
+    }
+    .mode-toggle button.active { background: #264F56; color: #F1E9DA; }
+    /* ── COLOR MODE TOGGLE ── */
+    .color-mode-toggle {
+      display: flex; align-items: center;
+      border: 1.5px solid #e8e3db; border-radius: 20px;
+      overflow: hidden; background: #f5f4f1;
+    }
+    .color-mode-toggle button {
+      border: none; cursor: pointer; font-size: 11px;
+      font-weight: 700; padding: 5px 11px;
+      background: transparent; color: #999;
+      transition: all .15s; font-family: inherit;
+    }
+    .color-mode-toggle button.active { background: #264F56; color: #F1E9DA; }
+
+    /* ── LIGHT / DARK TEXT TOGGLE ── */
+    .txt-toggle {
+      display: flex; align-items: center; gap: 0;
+      border: 1.5px solid #e8e3db; border-radius: 20px;
+      overflow: hidden; background: #f5f4f1;
+    }
+    .txt-toggle button {
+      border: none; cursor: pointer; font-size: 11px;
+      font-weight: 700; padding: 5px 11px;
+      background: transparent; color: #999;
+      transition: all .15s; font-family: inherit;
+    }
+    .txt-toggle button.active {
+      background: #264F56; color: #F1E9DA;
+    }
+
+    /* ── SHOW TOGGLE ── */
+    .show-toggle {
+      display: flex; align-items: center; gap: 5px;
+      cursor: pointer; font-size: 11px; font-weight: 600; color: #999;
+      user-select: none;
+    }
+    .show-toggle input { accent-color: #264F56; }
+
+
+    /* ── DIVIDER ── */
+    .ctrl-sep {
+      width: 1px; height: 20px; background: #e8e3db; flex-shrink: 0;
+    }
+
+    /* ── EDITOR AREA ── */
+    .editor-wrap {
+      flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+      align-items: center; padding: 14px 20px 12px; gap: 0;
+    }
+    .page-frame {
+      flex: 1; min-height: 0; display: flex; align-items: center;
+      justify-content: center; width: 100%; padding-bottom: 12px;
+      gap: 10px;
+    }
+    .v-slider-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      align-self: stretch; justify-content: center;
+      padding: 6px 0;
+    }
+    .v-slider-wrap input[type=range] {
+      writing-mode: vertical-lr;
+      flex: 1; min-height: 0;
+      width: 22px;
+      accent-color: #264F56;
+      cursor: ns-resize;
+      background: transparent;
+    }
+    .page {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      height: 100%;
+      max-width: calc(100vw - 40px);
+      background: #fff; border-radius: 16px;
+      box-shadow: 0 4px 32px rgba(38,79,86,.10); overflow: hidden;
+    }
+    .page.drag-over { outline: 3px dashed #264F56; outline-offset: -6px; }
+    .snap-guide {
+      position: absolute; z-index: 15; pointer-events: none;
+      background: rgba(255,255,255,0.50); opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .snap-guide.dark { background: rgba(30,30,30,0.50); }
+    .snap-guide.h { left: 5%; width: 90%; height: 1px; top: 50%; transform: translateY(-50%); }
+    .snap-guide.v { top: 5%; height: 90%; width: 1px; left: 50%; transform: translateX(-50%); }
+    .snap-guide.visible { opacity: 1; }
+    .postit-rot-handle {
+      position: absolute;
+      width: 24px; height: 24px;
+      background: rgba(255,255,255,0.92);
+      border: 1.5px solid rgba(38,79,86,0.35);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; line-height: 1;
+      cursor: grab; z-index: 30;
+      user-select: none; touch-action: none;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.18);
+      pointer-events: auto;
+      transform: translate(50%, -50%);
+    }
+    .postit-rot-handle:hover { background: #fff; border-color: rgba(38,79,86,0.6); }
+    .page-photo-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background-size: cover; background-position: center; background-repeat: no-repeat;
+      border-radius: 16px;
+    }
+    #photoAddBtn, #photoRemoveBtn {
+      position: absolute; top: 10px; z-index: 20;
+      background: rgba(0,0,0,0.38); color: #fff; border: none;
+      border-radius: 20px; font-size: 12px; font-weight: 700;
+      padding: 5px 10px; cursor: pointer;
+      font-family: inherit; transition: background .15s;
+    }
+    #photoAddBtn  { right: 10px; }
+    #photoRemoveBtn { right: 52px; display: none; }
+    #photoAddBtn:hover, #photoRemoveBtn:hover { background: rgba(0,0,0,0.62); }
+
+    /* ── TEXT INPUT ROW ── */
+    .text-input-row {
+      position: relative;
+      width: 100%; max-width: 360px; margin-top: 10px;
+    }
+    .text-input-row textarea {
+      width: 100%; border: 1.5px solid #e8e3db; border-radius: 12px;
+      padding: 10px 80px 10px 14px; font-size: 13px; outline: none;
+      background: #fafaf8; color: #264F56;
+      font-family: 'Caveat', cursive; font-weight: 600;
+      resize: none; height: 64px;
+      line-height: 1.5; box-sizing: border-box;
+    }
+    .text-input-row textarea:focus { border-color: #264F56; }
+    .text-input-row .btn-inside {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: #F1E9DA; color: #264F56; border: none; border-radius: 18px;
+      padding: 6px 13px; font-size: 12px; font-weight: 700;
+      font-family: inherit; cursor: pointer; white-space: nowrap;
+      transition: background .15s;
+    }
+    .text-input-row .btn-inside:hover { background: #e8e3db; }
+
+    /* ── STYLE BAR ── */
+    .style-bar {
+      display: flex; gap: 8px; margin-top: 10px;
+    }
+    .style-btn {
+      border: 1.5px solid #e8e3db; background: #fff; color: #999;
+      border-radius: 20px; padding: 6px 18px; font-size: 12px;
+      font-weight: 700; cursor: pointer; transition: all .15s;
+      font-family: inherit;
+    }
+    .style-btn:hover { border-color: #264F56; color: #264F56; }
+    .style-btn.active { background: #264F56; color: #F1E9DA; border-color: #264F56; }
+    .bg-text-layer {
+      position: absolute; inset: 0;
+      pointer-events: none; user-select: none; overflow: hidden;
+    }
+    .bg-text-layer canvas { position: absolute; inset: 0; }
+
+    .editor {
+      position: relative; z-index: 1; min-height: 480px; width: 100%;
+      padding: 36px 44px; outline: none; border: none; resize: none;
+      font-family: 'Caveat', cursive;
+      font-size: 20px; line-height: 1.7; color: #264F56;
+      caret-color: transparent; background: transparent;
+      cursor: default; pointer-events: none; user-select: none;
+      box-sizing: border-box;
+    }
+    .editor::placeholder {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      font-size: 15px; color: #ccc; font-weight: 400;
+    }
+
+    /* ── CHIP ANIMATIONS ── */
+    @keyframes chipBounceIn {
+      0%   { opacity: 0; transform: translateX(-22px) scale(0.7); }
+      55%  { opacity: 1; transform: translateX(5px) scale(1.06); }
+      75%  { transform: translateX(-2px) scale(0.97); }
+      100% { opacity: 1; transform: translateX(0) scale(1); }
+    }
+    @keyframes chipSparkleIn {
+      0%   { opacity: 0; transform: scale(0.12) rotate(-14deg); }
+      52%  { opacity: 1; transform: scale(1.16) rotate(5deg); }
+      74%  { transform: scale(0.92) rotate(-2deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    }
+    @keyframes starParticle {
+      0%   { opacity: 1; transform: translate(0,0) scale(1.3); }
+      100% { opacity: 0; transform: translate(var(--pdx),var(--pdy)) scale(0); }
+    }
+    @keyframes chipReveal {
+      from { clip-path: inset(0 100% 0 0); }
+      to   { clip-path: inset(0 0% 0 0); }
+    }
+    /* Animation dropdown */
+    .anim-select {
+      border: 1.5px solid #e8e3db; border-radius: 20px;
+      padding: 5px 14px; font-size: 11px; font-weight: 700;
+      background: #f5f4f1; color: #264F56;
+      cursor: pointer; font-family: inherit; outline: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    .anim-select:focus { border-color: #264F56; }
+
+    /* ── STATUS BAR ── */
+    .statusbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 20px; font-size: 11px; color: #bbb;
+      background: #fff; border-top: 1px solid #e8e3db;
+    }
+    .statusbar b { color: #264F56; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<!-- CONTROL BAR -->
+<div class="controlbar">
+
+  <!-- ROW 1: Color (all on one line) -->
+  <div class="ctrl-row">
+    <span class="ctrl-label" id="colorLabel">Color</span>
+    <div class="palette-group">
+      <div class="palette-tabs" id="paletteTabs">
+        <button class="palette-tab active" onclick="switchPalette('earth',this)">Earth Tone</button>
+        <button class="palette-tab"        onclick="switchPalette('summer',this)">Summer</button>
+        <button class="palette-tab"        onclick="switchPalette('xmas',this)">Xmas</button>
+      </div>
+      <!-- Highlight sub-tabs (shown only in Highlight mode) -->
+      <div class="palette-tabs" id="hlTabs" style="display:none">
+        <button class="palette-tab active" id="hlTabDefault" onclick="switchHlTab('default',this)">Default</button>
+        <button class="palette-tab"        id="hlTabPhoto"   onclick="switchHlTab('photo',this)" style="display:none">Photo</button>
+      </div>
+      <div class="swatch-row" id="chipRow">
+        <div class="swatch active" style="background:#F1E9DA" data-c="#F1E9DA" data-pair="#613339" title="Birch ↔ Berry"    onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#B99ABB" data-c="#B99ABB" data-pair="#613339" title="Lilac ↔ Berry"    onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#DE896C" data-c="#DE896C" data-pair="#264F56" title="Peach ↔ Teal"     onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#EDC470" data-c="#EDC470" data-pair="#613339" title="Saffron ↔ Berry"  onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#ADB2C4" data-c="#ADB2C4" data-pair="#264F56" title="Bluebells ↔ Teal" onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#D1D48B" data-c="#D1D48B" data-pair="#264F56" title="Guava ↔ Teal"     onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#BEACDF" data-c="#BEACDF" data-pair="#613339" title="Wisteria ↔ Berry" onclick="pickChip(this)"></div>
+        <div class="swatch"        style="background:#E3B17F" data-c="#E3B17F" data-pair="#264F56" title="Sand ↔ Teal"      onclick="pickChip(this)"></div>
+      </div>
+    </div>
+    <div class="color-mode-toggle" id="colorModeToggle">
+      <button id="btnSingle" class="active" onclick="setMultiColor(false,this)">Single</button>
+      <button id="btnMulti"                 onclick="setMultiColor(true,this)">Multi</button>
+    </div>
+    <!-- Highlight opacity (shown only in Highlight mode) -->
+    <div id="hlOpacitySection" style="display:none;align-items:center;gap:6px">
+      <span class="ctrl-label">Opacity</span>
+      <input type="range" id="hlOpacitySlider" min="10" max="100" step="5" value="75"
+        style="width:72px;accent-color:#264F56;cursor:pointer"
+        oninput="setHighlightOpacity(this.value)">
+      <span id="hlOpacityVal" style="font-size:11px;color:#999;min-width:28px">75%</span>
+    </div>
+  </div>
+
+  <!-- ROW 2: Other settings -->
+  <div class="ctrl-row">
+    <span class="ctrl-label">Text Size</span>
+    <input type="range" id="bgSize" min="12" max="40" value="22" oninput="renderBg()"
+      style="width:72px;accent-color:#264F56;cursor:pointer"/>
+    <div id="widthSection" style="display:flex;align-items:center;gap:6px">
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Width</span>
+      <input type="range" id="lineWidthSlider" min="30" max="100" step="5" value="100"
+        style="width:72px;accent-color:#264F56;cursor:pointer"
+        oninput="setLineWidth(this.value)">
+      <span id="lineWidthVal" style="font-size:11px;color:#999;min-width:28px">100%</span>
+    </div>
+    <!-- Post-it size (shown only in Post-it mode) -->
+    <div id="postitScaleSection" style="display:none;align-items:center;gap:6px">
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Post-it Size</span>
+      <input type="range" id="postitScaleSlider" min="25" max="200" step="5" value="100"
+        style="width:64px;accent-color:#264F56;cursor:pointer"
+        oninput="setPostitScale(this.value)">
+      <span id="postitScaleVal" style="font-size:11px;color:#999;min-width:28px">100%</span>
+    </div>
+    <div class="ctrl-sep"></div>
+    <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px" onclick="shuffleBg()">↻ Shuffle</button>
+    <div class="ctrl-sep"></div>
+    <span class="ctrl-label">Anim</span>
+    <select id="animSelect" class="anim-select" onchange="setAnimation(this.value)">
+      <option value="off">Off</option>
+      <option value="bounce">↙ Bounce</option>
+      <option value="sparkle">✦ Sparkle</option>
+      <option value="typing">▌ Typing</option>
+    </select>
+    <div class="ctrl-sep"></div>
+    <label class="show-toggle">
+      <input type="checkbox" id="bgVisibleToggle" checked
+        onchange="document.getElementById('bgVisible').checked=this.checked; renderBg();">
+      Text BG
+    </label>
+  </div>
+
+  <!-- Hidden functional elements (JS needs these) -->
+  <div style="display:none">
+    <input type="checkbox" id="bgVisible" checked onchange="renderBg()"/>
+    <button id="btnCollage" class="active" onclick="setMode('chips',this)">Collage</button>
+    <button id="btnOverlay"               onclick="setMode('overlay',this)">Overlay</button>
+  </div>
+
+</div>
+
+<!-- PAGE -->
+<div class="editor-wrap">
+  <div class="page-frame">
+    <div class="page" id="page">
+      <div class="page-photo-bg" id="photoBg"></div>
+      <button id="photoAddBtn" onclick="document.getElementById('photoInput').click()" title="Add photo background">📷</button>
+      <button id="photoRemoveBtn" onclick="removePhoto()">✕</button>
+      <div class="snap-guide h" id="snapH"></div>
+      <div class="snap-guide v" id="snapV"></div>
+      <div class="bg-text-layer" id="bgLayer"></div>
+      <textarea class="editor" id="editor" readonly tabindex="-1"></textarea>
+    </div>
+    <div class="v-slider-wrap">
+      <input type="range" id="bgOffsetSlider" min="-50" max="50" step="1" value="0"
+        oninput="setBgOffset(this.value)" title="Move text up / down">
+    </div>
+  </div>
+  <!-- Text input row: below canvas, above style pills -->
+  <div class="text-input-row">
+    <textarea id="bgInput" placeholder="Background text…" oninput="renderBg()"></textarea>
+    <button class="btn-inside" onclick="resetBgText()" title="Next preset text">↺ Reset</button>
+  </div>
+
+  <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="loadPhotoFile(this.files[0])">
+  <div class="style-bar">
+    <button id="btnRounded"   class="style-btn active" onclick="setChipStyle('rounded',this)">Rounded</button>
+    <button id="btnHighlight" class="style-btn"        onclick="setChipStyle('highlight',this)">Highlight</button>
+    <button id="btnPostit"    class="style-btn"        onclick="setChipStyle('postit',this)">Post-it</button>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div>Words <b id="wordCount">0</b> &nbsp; Chars <b id="charCount">0</b></div>
+  <div>Text Editor</div>
+</div>
+
+<script>
+  
+  const editor    = document.getElementById('editor');
+  const bgLayer   = document.getElementById('bgLayer');
+  const bgInput   = document.getElementById('bgInput');
+const bgSize    = document.getElementById('bgSize');
+  const bgVisible = document.getElementById('bgVisible');
+
+  let chipColor   = '#F1E9DA';
+  let mode        = 'chips';
+  let chipStyle   = 'rounded';
+  let textColor   = '#613339';
+  let masterSeed  = 42;
+  let multiColor          = false;
+  let highlightBgOpacity  = 0.75;   // bg-only opacity for highlight mode
+  let bgOffsetY           = 0;      // vertical offset % of canvas height
+  let bgOffsetX           = 0;      // horizontal offset % of canvas width
+  let animMode = 'off';  // 'off' | 'bounce' | 'sparkle' | 'typing'
+
+  function setAnimation(val) {
+    animMode = val;
+    renderBg();
+  }
+
+  function setHighlightOpacity(val) {
+    highlightBgOpacity = val / 100;
+    document.getElementById('hlOpacityVal').textContent = val + '%';
+    renderBg();
+  }
+
+  // ── Palette sets — keyed by tab name ──
+  const paletteSets = {
+    earth: {
+      swatches: [
+        {c:'#F1E9DA', pair:'#613339', title:'Birch ↔ Berry'},
+        {c:'#B99ABB', pair:'#613339', title:'Lilac ↔ Berry'},
+        {c:'#DE896C', pair:'#264F56', title:'Peach ↔ Teal'},
+        {c:'#EDC470', pair:'#613339', title:'Saffron ↔ Berry'},
+        {c:'#ADB2C4', pair:'#264F56', title:'Bluebells ↔ Teal'},
+        {c:'#D1D48B', pair:'#264F56', title:'Guava ↔ Teal'},
+        {c:'#BEACDF', pair:'#613339', title:'Wisteria ↔ Berry'},
+        {c:'#E3B17F', pair:'#264F56', title:'Sand ↔ Teal'},
+      ],
+      palette: [
+        ['#F1E9DA','#613339'],['#613339','#F1E9DA'],
+        ['#B99ABB','#613339'],['#613339','#B99ABB'],
+        ['#DE896C','#264F56'],['#264F56','#DE896C'],
+        ['#EDC470','#613339'],['#613339','#EDC470'],
+        ['#ADB2C4','#264F56'],['#264F56','#ADB2C4'],
+        ['#D1D48B','#264F56'],['#264F56','#D1D48B'],
+        ['#BEACDF','#613339'],['#613339','#BEACDF'],
+        ['#E3B17F','#264F56'],['#264F56','#E3B17F'],
+      ]
+    },
+    summer: {
+      swatches: [
+        {c:'#F2764A', pair:'#FFFEF0', title:'Coral ↔ Cream'},
+        {c:'#C4B0EE', pair:'#2B2060', title:'Lavender ↔ Navy'},
+        {c:'#F0C840', pair:'#6040A8', title:'Gold ↔ Plum'},
+        {c:'#C8DC20', pair:'#2B2060', title:'Lime ↔ Navy'},
+        {c:'#9080C8', pair:'#FFFEF0', title:'Violet ↔ Cream'},
+        {c:'#FFFEF0', pair:'#F2764A', title:'Cream ↔ Coral'},
+        {c:'#F4A8BC', pair:'#6040A8', title:'Pink ↔ Plum'},
+        {c:'#F5A878', pair:'#6040A8', title:'Peach ↔ Plum'},
+        {c:'#6040A8', pair:'#F0C840', title:'Plum ↔ Gold'},
+        {c:'#B4D8C8', pair:'#421950', title:'Mint ↔ Plum'},
+      ],
+      palette: [
+        ['#F2764A','#FFFEF0'],   // Coral
+        ['#C4B0EE','#F2764A'],   // Lavender+Coral
+        ['#F0C840','#6040A8'],   // Gold+Plum
+        ['#C8DC20','#2B2060'],   // Lime+Navy
+        ['#9080C8','#FFFEF0'],   // Violet+Cream
+        ['#F4A8BC','#6040A8'],   // Pink+Plum
+        ['#6040A8','#F0C840'],   // Plum+Gold
+        ['#B4D8C8','#421950'],   // Mint+Plum
+        ['#F5A878','#2B2060'],   // Peach+Navy
+        ['#FFFEF0','#9080C8'],   // Cream+Violet
+        ['#F2764A','#C8DC20'],   // Coral+Lime
+        ['#C4B0EE','#6040A8'],   // Lavender+Plum
+        ['#F0C840','#F2764A'],   // Gold+Coral
+        ['#9080C8','#C8DC20'],   // Violet+Lime
+        ['#F4A8BC','#2B2060'],   // Pink+Navy
+        ['#B4D8C8','#FFFEF0'],   // Mint+Cream
+        ['#F5A878','#9080C8'],   // Peach+Violet
+        ['#C8DC20','#F2764A'],   // Lime+Coral
+      ]
+    },
+    xmas: {
+      swatches: [
+        {c:'#F2E8CF', pair:'#386641', title:'Parchment ↔ Forest'},
+        {c:'#A7C957', pair:'#386641', title:'Lime ↔ Forest'},
+        {c:'#386641', pair:'#F2E8CF', title:'Forest ↔ Parchment'},
+        {c:'#386641', pair:'#A7C957', title:'Forest ↔ Lime'},
+        {c:'#BC4749', pair:'#F2E8CF', title:'Red ↔ Parchment'},
+        {c:'#F2E8CF', pair:'#BC4749', title:'Parchment ↔ Red'},
+      ],
+      palette: [
+        ['#F2E8CF','#386641'],   // Parchment+Forest
+        ['#A7C957','#386641'],   // Lime+Forest
+        ['#BC4749','#F2E8CF'],   // Red+Parchment
+        ['#386641','#F2E8CF'],   // Forest+Parchment
+        ['#F2E8CF','#BC4749'],   // Parchment+Red
+        ['#386641','#A7C957'],   // Forest+Lime
+        ['#A7C957','#F2E8CF'],   // Lime+Parchment
+        ['#F2E8CF','#A7C957'],   // Parchment+Lime
+      ]
+    }
+  };
+
+  // Active palette array (mutable — updated on tab switch)
+  const palette = [...paletteSets.earth.palette];
+
+  function switchPalette(key, btn) {
+    document.querySelectorAll('.palette-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const set = paletteSets[key];
+    const chipRow = document.getElementById('chipRow');
+    // Rebuild swatch row
+    chipRow.innerHTML = '';
+    set.swatches.forEach((sw, i) => {
+      const d = document.createElement('div');
+      d.className = 'swatch' + (i === 0 ? ' active' : '');
+      d.style.background = sw.c;
+      d.dataset.c    = sw.c;
+      d.dataset.pair = sw.pair;
+      d.title        = sw.title;
+      d.onclick      = function() { pickChip(this); };
+      chipRow.appendChild(d);
+    });
+    // Swap palette entries
+    palette.length = 0;
+    set.palette.forEach(p => palette.push(p));
+    // Activate first swatch, then try to restore previously selected color
+    chipColor = set.swatches[0].c;
+    textColor = set.swatches[0].pair;
+    paletteOffset = 0;
+    updatePreviews();
+    _restoreColorInRow();
+    renderBg();
+  }
+
+  function setMultiColor(val, btn) {
+    multiColor = val;
+    document.querySelectorAll('.color-mode-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderBg();
+  }
+
+  function getTextColor() { return textColor; }
+
+  function updatePreviews() { /* preview squares removed */ }
+
+  /* ── Seeded RNG ── */
+  let _s = 42;
+  function initRng(seed) { _s = Math.abs(Math.floor(seed)) || 42; }
+  function rng()      { _s = (_s * 16807) % 2147483647; return (_s-1)/2147483646; }
+  function rngSigned(){ return rng()*2-1; }
+
+  /* ── Controls ── */
+  function pickChip(el) {
+    const alreadyActive = el.classList.contains('active');
+    document.querySelectorAll('#chipRow .swatch').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+
+    if (alreadyActive) {
+      // Tap again → toggle swap direction
+      swapDir = swapDir === 'light' ? 'dark' : 'light';
+      swapColors(); // swaps chipColor ↔ textColor, re-renders
+    } else {
+      // New swatch → reset to light
+      swapDir = 'light';
+      chipColor = el.dataset.c;
+      textColor = el.dataset.pair;
+      _savedChipColor = chipColor; // persist for style switches
+      updatePreviews();
+      renderBg();
+    }
+  }
+
+  let swapDir = 'light'; // 'light' = BG is the swatch color, 'dark' = swapped
+
+  function setSwapDir(dir, btn) {
+    if (dir === swapDir) return;
+    swapDir = dir;
+    document.querySelectorAll('.txt-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    swapColors();
+  }
+
+  function swapColors() {
+    [chipColor, textColor] = [textColor, chipColor];
+    // Keep the same swatch highlighted — no change to active state
+    updatePreviews();
+    renderBg();
+  }
+
+
+  function setMode(m, el) {
+    mode = m;
+    document.getElementById('btnCollage').classList.toggle('active', m === 'chips');
+    document.getElementById('btnOverlay').classList.toggle('active', m === 'overlay');
+    renderBg();
+  }
+
+  // ── Highlight-only pastel palette (light bg, dark text — no swap) ──
+  const highlightSwatches = [
+    {c:'#F5F0E8', pair:'#2C2C2C', title:'Off White'},
+    {c:'#F5A888', pair:'#2C2C2C', title:'Peach'},
+    {c:'#C8B8EC', pair:'#2C2C2C', title:'Lavender'},
+    {c:'#EE8098', pair:'#2C2C2C', title:'Pink'},
+    {c:'#D8E848', pair:'#2C2C2C', title:'Lime'},
+    {c:'#70C8C0', pair:'#2C2C2C', title:'Teal'},
+  ];
+
+  let savedPaletteKey = 'earth'; // restore tab when leaving highlight mode
+
+  // Rebuild highlight swatch row — base pastels + photo colors if available
+  function loadHighlightSwatches() {
+    const hasPhoto = !!paletteSets.photo;
+    const hlTabPhoto   = document.getElementById('hlTabPhoto');
+    const hlTabDefault = document.getElementById('hlTabDefault');
+
+    // Show/hide Photo sub-tab
+    if (hlTabPhoto) hlTabPhoto.style.display = hasPhoto ? '' : 'none';
+
+    // If photo was removed while Photo tab was active, fall back to Default
+    if (!hasPhoto && _hlActiveTab === 'photo') _hlActiveTab = 'default';
+
+    // Restore correct active state on the buttons
+    document.querySelectorAll('#hlTabs .palette-tab').forEach(b => b.classList.remove('active'));
+    const activeBtn = _hlActiveTab === 'photo' ? hlTabPhoto : hlTabDefault;
+    if (activeBtn) activeBtn.classList.add('active');
+
+    document.getElementById('hlTabs').style.display = 'flex';
+    _fillHlChipRow(_hlActiveTab);
+  }
+
+  let _hlActiveTab = 'default';
+
+  function switchHlTab(key, btn) {
+    _hlActiveTab = key;
+    document.querySelectorAll('#hlTabs .palette-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _fillHlChipRow(key);
+    renderBg();
+  }
+
+  function _fillHlChipRow(key) {
+    const swatches = key === 'photo' && paletteSets.photo
+      ? paletteSets.photo.swatches
+      : highlightSwatches;
+
+    const chipRow = document.getElementById('chipRow');
+    chipRow.innerHTML = '';
+    swatches.forEach((sw, i) => {
+      const d = document.createElement('div');
+      d.className        = 'swatch' + (i === 0 ? ' active' : '');
+      d.style.background = sw.c;
+      d.dataset.c        = sw.c;
+      d.dataset.pair     = sw.pair;
+      d.title            = sw.title;
+      d.onclick          = function() { pickChip(this); };
+      chipRow.appendChild(d);
+    });
+    palette.length = 0;
+    swatches.forEach(sw => palette.push([sw.c, sw.pair]));
+    paletteOffset = 0;
+    chipColor = swatches[0].c;
+    textColor = swatches[0].pair;
+    updatePreviews();
+    _restoreColorInRow();
+  }
+
+  // Tries to re-select the previously active color after a palette rebuild
+  let _savedChipColor = null;
+  function _restoreColorInRow() {
+    if (!_savedChipColor) return;
+    const match = document.querySelector(`#chipRow .swatch[data-c="${_savedChipColor}"]`);
+    if (match) {
+      document.querySelectorAll('#chipRow .swatch').forEach(s => s.classList.remove('active'));
+      match.classList.add('active');
+      chipColor = match.dataset.c;
+      textColor = match.dataset.pair;
+      updatePreviews();
+    }
+  }
+
+  function setChipStyle(s, btn) {
+    if (s === 'postit' && chipStyle !== 'postit') {
+      postitCX = null; postitCY = null; postitScale = 1.0; postitRot = 0;
+      const sl = document.getElementById('postitScaleSlider');
+      if (sl) { sl.value = 100; document.getElementById('postitScaleVal').textContent = '100%'; }
+      document.getElementById('page').style.cursor = '';
+    } else if (s !== 'postit') {
+      document.getElementById('page').style.cursor = 'grab';
+    }
+    chipStyle = s;
+    document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const colorLabel      = document.getElementById('colorLabel');
+    const colorModeToggle = document.getElementById('colorModeToggle');
+    const paletteTabs     = document.getElementById('paletteTabs');
+
+    document.getElementById('postitScaleSection').style.display = s === 'postit' ? 'flex' : 'none';
+    document.getElementById('widthSection').style.display = s === 'postit' ? 'none' : 'flex';
+
+    // Save current color so we can restore it after palette rebuild
+    _savedChipColor = chipColor;
+
+    if (s === 'highlight') {
+      // Sync hlActiveTab from main palette: if Photo tab was active, mirror it
+      const mainPhotoTab = document.getElementById('paletteTabPhoto');
+      if (mainPhotoTab && mainPhotoTab.classList.contains('active') && paletteSets.photo) {
+        _hlActiveTab = 'photo';
+      }
+      colorLabel.style.display                                          = 'none';
+      colorModeToggle.style.display                                     = '';
+      paletteTabs.style.display                                         = 'none';
+      document.getElementById('hlOpacitySection').style.display        = 'flex';
+      loadHighlightSwatches();
+    } else {
+      // Sync main palette Photo tab from hlTabs: if Photo was active in highlight, restore it
+      if (_hlActiveTab === 'photo' && paletteSets.photo) {
+        const mainPhotoTab = document.getElementById('paletteTabPhoto');
+        if (mainPhotoTab) {
+          document.querySelectorAll('#paletteTabs .palette-tab').forEach(b => b.classList.remove('active'));
+          mainPhotoTab.classList.add('active');
+        }
+      }
+      colorLabel.style.display                                          = '';
+      colorModeToggle.style.display                                     = '';
+      paletteTabs.style.display                                         = '';
+      document.getElementById('hlOpacitySection').style.display        = 'none';
+      document.getElementById('hlTabs').style.display                  = 'none';
+      // Restore the active palette tab
+      const activeTab = document.querySelector('#paletteTabs .palette-tab.active');
+      if (activeTab) {
+        const tabLabel = activeTab.textContent.trim().toLowerCase().replace(/\s/g,'');
+        const key = tabLabel.startsWith('📷') || tabLabel.includes('photo') ? 'photo'
+                  : tabLabel === 'earthtone' ? 'earth'
+                  : tabLabel === 'xmas' ? 'xmas' : 'summer';
+        if (paletteSets[key]) switchPalette(key, activeTab);
+      }
+    }
+    renderBg();
+  }
+
+  let paletteOffset = 0; // tracks current rotation of palette for multi-color
+
+  let lineWidthPct = 100; // % of canvas width used as wrap container
+
+  function setLineWidth(val) {
+    lineWidthPct = parseInt(val);
+    document.getElementById('lineWidthVal').textContent = val + '%';
+    renderBg();
+  }
+
+  function setBgOffset(val) {
+    bgOffsetY = parseInt(val);
+    renderBg();
+  }
+
+  function setPostitScale(val) {
+    postitScale = parseInt(val) / 100;
+    document.getElementById('postitScaleVal').textContent = val + '%';
+    renderBg();
+  }
+
+
+  function shuffleBg() {
+    masterSeed = Math.floor(Math.random() * 999983);
+    if (multiColor) {
+      // Rotate palette so every shuffle gives a fresh color order
+      paletteOffset = (paletteOffset + 1) % palette.length;
+    } else {
+      // Single: advance to next swatch (find by .active class, not by chipColor)
+      const swatches = [...document.querySelectorAll('#chipRow .swatch')];
+      const cur = document.querySelector('#chipRow .swatch.active');
+      let idx = swatches.indexOf(cur);
+      idx = (idx + 1) % swatches.length;
+      swatches.forEach(s => s.classList.remove('active'));
+      swatches[idx].classList.add('active');
+      chipColor = swatches[idx].dataset.c;
+      textColor = swatches[idx].dataset.pair;
+      updatePreviews();
+    }
+    renderBg();
+  }
+
+  /* ════════════════════════════════
+     ORGANIC CHIP SHAPE
+     Base = text bounding box.
+     Each edge = one quadratic-bezier
+     bow (outward only).
+     Corners = clean arcs.
+  ════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════
+     ORGANIC PILL  — pill base + organic waves on long edges
+     ─────────────────────────────────────────────────────
+     Shape = pill (two semicircle caps + straight middle).
+     The LEFT / RIGHT caps stay perfectly round.
+     The TOP / BOTTOM long edges each get ONE smooth organic
+     sine wave — giving the hand-cut paper feel without
+     making the shape look like an ellipse or blob.
+     Catmull-Rom through all points → single smooth curve.
+  ═══════════════════════════════════════════════════════ */
+  /* ── HIGHLIGHT shape: hand-painted brush/marker stroke ──
+     Draws and fills directly (does not just define a path).
+     Always consumes exactly 42 rng() calls for determinism:
+       4 (crop) + 18 (top edge) + 18 (bot edge) + 2 (side noise) = 42
+  ── */
+  function drawHighlight(ctx, textW, fontSize, color) {
+    // === Partial coverage: 28% chance either end is cropped ===
+    const pL = rng(), aL = rng(), pR = rng(), aR = rng();   // 4 calls
+    // Max crop per side = 5% of textW → guaranteed ≥ 90% coverage
+    const cropL = pL < 0.40 ? aL * 0.05 : 0;
+    const cropR = pR < 0.40 ? aR * 0.05 : 0;
+
+    const baseHW = textW / 2 + fontSize * 0.08;
+    const xL     = -baseHW + textW * cropL;   // left boundary
+    const xR     =  baseHW - textW * cropR;   // right boundary
+    const ht     = fontSize * 0.33;            // half-height (cap-height only)
+    const amp    = fontSize * 0.048;           // edge roughness amplitude
+
+    // === Rough edge generator ===
+    // Always exactly N interior points → always N*2 rng() calls
+    const N = 9;
+    function roughEdge(x0, x1, baseY) {
+      const pts = [[x0, baseY]];
+      for (let i = 1; i <= N; i++) {
+        const ra = rng(), rb = rng();
+        const f  = i / (N + 1);
+        const w  = Math.sin(f * Math.PI);   // taper noise to 0 at corners
+        // Two-component noise: fine random + occasional coarser bristle notch
+        const dy = ((ra - 0.5) * 2.0 + (rb - 0.5) * 0.7) * amp * w;
+        pts.push([x0 + f * (x1 - x0), baseY + dy]);
+      }
+      pts.push([x1, baseY]);
+      return pts;   // N+2 points, N*2 rng calls
+    }
+
+    const topE = roughEdge(xL, xR, -ht);    // 18 rng calls
+    const botE = roughEdge(xL, xR,  ht);    // 18 rng calls
+    const nL   = (rng() - 0.5) * amp * 0.8; // 1 call — left side lean
+    const nR   = (rng() - 0.5) * amp * 0.8; // 1 call — right side lean
+    // Total so far: 4 + 18 + 18 + 2 = 42 rng calls ✓
+
+    // === Build the brush-stroke path ===
+    ctx.beginPath();
+    ctx.moveTo(topE[0][0], topE[0][1]);
+    // Top edge left → right (jagged)
+    for (let i = 1; i < topE.length; i++) ctx.lineTo(topE[i][0], topE[i][1]);
+    // Right side (slightly angled for brush-lift feel)
+    ctx.lineTo(xR + nR, ht);
+    // Bottom edge right → left (jagged, reversed)
+    for (let i = botE.length - 1; i >= 0; i--) ctx.lineTo(botE[i][0], botE[i][1]);
+    // Left side
+    ctx.lineTo(xL + nL, -ht);
+    ctx.closePath();
+
+    // Fill: two-pass for soft layered ink look
+    ctx.globalAlpha = highlightBgOpacity;
+    ctx.fillStyle   = color;
+    ctx.fill();
+    // Second pass: slight downward offset simulates marker ink pooling
+    ctx.save();
+    ctx.translate(0, fontSize * 0.012);
+    ctx.globalAlpha = highlightBgOpacity * 0.10;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── POST-IT shape: sticky note with dog-ear fold ──
+     Always consumes exactly 5 rng() calls for determinism.
+  ── */
+  function drawPostit(ctx, textW, fontSize, color) {
+    // Pre-roll all randoms (fixed count = 5)
+    const r0 = rng(), r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng();
+
+    const hw   = textW / 2 + fontSize * 0.34;
+    const ht   = fontSize * 0.54 + (r0 - 0.5) * fontSize * 0.06;  // slight height variation
+    const cr   = fontSize * 0.09;    // corner radius (small — post-it corners)
+    const fold = fontSize * 0.28;    // dog-ear fold size (top-right)
+    const wAmp = fontSize * 0.014;   // edge micro-wobble for hand-cut feel
+
+    // One wobble value per edge
+    const tWob = (r1 - 0.5) * wAmp;
+    const rWob = (r2 - 0.5) * wAmp;
+    const bWob = (r3 - 0.5) * wAmp;
+    const lWob = (r4 - 0.5) * wAmp;
+
+    // === Main note shape (top-right has dog-ear cut) ===
+    ctx.beginPath();
+    ctx.moveTo(-hw + cr, -ht + tWob);                                   // top-left after corner
+    ctx.lineTo( hw - fold, -ht + tWob);                                 // top edge → dog-ear
+    ctx.lineTo( hw + rWob, -ht + fold);                                 // dog-ear diagonal
+    ctx.lineTo( hw + rWob,  ht - cr + bWob);                           // right edge
+    ctx.quadraticCurveTo( hw + rWob,  ht + bWob,  hw - cr,  ht + bWob); // bottom-right corner
+    ctx.lineTo(-hw + cr,  ht + bWob);                                   // bottom edge
+    ctx.quadraticCurveTo(-hw + lWob,  ht + bWob, -hw + lWob, ht - cr + bWob); // bottom-left corner
+    ctx.lineTo(-hw + lWob, -ht + cr + tWob);                           // left edge
+    ctx.quadraticCurveTo(-hw + lWob, -ht + tWob, -hw + cr, -ht + tWob); // top-left corner
+    ctx.closePath();
+
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle   = color;
+    ctx.fill();
+
+    // === Dog-ear shadow triangle ===
+    ctx.beginPath();
+    ctx.moveTo(hw - fold, -ht + tWob);
+    ctx.lineTo(hw + rWob, -ht + fold);
+    ctx.lineTo(hw - fold, -ht + fold);
+    ctx.closePath();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle   = '#000';
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+  }
+
+  function drawOrganicBlob(ctx, textW, fontSize, padX, padY, wordLen) {
+    const th = fontSize;
+    // padX and padY are both pre-computed by caller — layout & drawing are in sync
+
+    const hw = textW / 2 + padX;   // half-length of the straight section
+    const r  = th  / 2 + padY;     // cap radius  (= half chip height)
+
+    // Short words (< 3 chars) get very subtle curves
+    const ampScale = wordLen < 3 ? 0.15 : 1.0;
+
+    // Unique organic wave per top / bottom edge
+    const tAmp    = th * (0.07 + rng() * 0.09) * ampScale;   // top wave depth
+    const bAmp    = th * (0.07 + rng() * 0.09) * ampScale;   // bottom wave depth
+    const tPhase  = rng() * Math.PI * 2;
+    const bPhase  = rng() * Math.PI * 2;
+    // 1 wave = single gentle arc; 2 waves = S-curve across the edge
+    const tCycles = rng() < 0.65 ? 1 : 2;
+    const bCycles = rng() < 0.65 ? 1 : 2;
+
+    const Ne = 11;   // sample points per straight edge
+    const Nc = 9;    // sample points per semicircle cap
+    const pts = [];
+
+    // ── Top edge: left → right  (y = −r + wave)
+    for (let i = 0; i < Ne; i++) {
+      const f = i / Ne;
+      // Windowed so the wave eases to 0 near the caps
+      const win  = Math.sin(f * Math.PI);
+      const wave = tAmp * win * Math.sin(f * Math.PI * tCycles + tPhase);
+      pts.push({ x: -hw + f * 2 * hw,  y: -r + wave });
+    }
+
+    // ── Right cap: top (−π/2) → bottom (+π/2)
+    for (let i = 0; i < Nc; i++) {
+      const a = -Math.PI / 2 + (i / Nc) * Math.PI;
+      pts.push({ x: hw + Math.cos(a) * r,  y: Math.sin(a) * r });
+    }
+
+    // ── Bottom edge: right → left  (y = +r + wave)
+    for (let i = 0; i < Ne; i++) {
+      const f = i / Ne;
+      const win  = Math.sin(f * Math.PI);
+      const wave = bAmp * win * Math.sin(f * Math.PI * bCycles + bPhase);
+      pts.push({ x: hw - f * 2 * hw,  y: r + wave });
+    }
+
+    // ── Left cap: bottom (+π/2) → top (+3π/2)
+    for (let i = 0; i < Nc; i++) {
+      const a = Math.PI / 2 + (i / Nc) * Math.PI;
+      pts.push({ x: -hw + Math.cos(a) * r,  y: Math.sin(a) * r });
+    }
+
+    // ── Catmull-Rom → one smooth closed curve ──
+    const n = pts.length;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i-1+n)%n], p1 = pts[i],
+            p2 = pts[(i+1)  %n], p3 = pts[(i+2)%n];
+      ctx.bezierCurveTo(
+        p1.x+(p2.x-p0.x)/6, p1.y+(p2.y-p0.y)/6,
+        p2.x-(p3.x-p1.x)/6, p2.y-(p3.y-p1.y)/6,
+        p2.x, p2.y
+      );
+    }
+    ctx.closePath();
+  }
+
+  /* ════════════════════════════════
+     MAIN RENDER
+  ════════════════════════════════ */
+  async function renderBg() {
+    // Snap guide colour: dark on light backgrounds, light on dark
+    const _sg = document.querySelectorAll('.snap-guide');
+    const [sr,sg,sb] = hexToRgb(chipColor);
+    const _bgLum = (0.299*sr + 0.587*sg + 0.114*sb) / 255;
+    _sg.forEach(g => g.classList.toggle('dark', _bgLum > 0.55));
+
+    bgLayer.innerHTML = '';
+    if (!bgVisible.checked) return;
+    const rawText  = bgInput.value.trim();
+    if (!rawText) return;
+    const opacity  = 0.92;
+    const fontSize = parseInt(bgSize.value);
+    if (mode === 'overlay') {
+      renderOverlay(rawText, opacity, fontSize);
+    } else if (chipStyle === 'postit') {
+      await renderPostitNote(rawText, fontSize);
+    } else {
+      await renderChips(rawText, opacity, fontSize);
+    }
+  }
+
+  /* ════════════════════════════════
+     SINGLE POST-IT NOTE RENDER
+     Draggable + resizable note drawn on its own canvas inside a positioned wrapper.
+  ════════════════════════════════ */
+  let postitCX    = null;
+  let postitCY    = null;
+  let postitScale = 1.0;
+  let postitRot   = 0;   // degrees, user-controlled
+  let _activeRotHandle = null;  // reference to current handle for show/hide
+
+  async function renderPostitNote(text, fontSize) {
+    try { await document.fonts.load(`700 ${fontSize}px Caveat`); } catch(e) {}
+
+    const page = document.getElementById('page');
+    const pw   = page.offsetWidth  || 720;
+    const ph   = page.offsetHeight || 720;
+
+    const baseNoteS = Math.min(pw * 0.60, ph * 0.64, 430);
+    const noteS     = baseNoteS * postitScale;
+    const hw = noteS / 2, ht = noteS / 2;
+
+    const border    = noteS * (4.5  / 180);
+    const headerH   = noteS * (33   / 180);
+    const labelSize = noteS * (6.5  / 180);
+    const padX      = noteS * (14   / 180);
+    const padVert   = noteS * 0.055;
+    const textW     = noteS - padX * 2;
+    const contentH  = noteS - headerH - padVert * 2;
+
+    const shadow = Math.round(noteS * 0.18);
+    const pad = shadow;
+    const cw = noteS + pad * 2, ch = noteS + pad * 2;
+    const dpr = devicePixelRatio;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cw * dpr; canvas.height = ch * dpr;
+    canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Auto-fit font
+    const words = text.split(/\s+/).filter(Boolean);
+    let fitSize = Math.max(8, fontSize * postitScale), wLines = [], lineH = fitSize * 1.55;
+    function wrapWords(ws, maxW) {
+      const lines = []; let cur = '';
+      for (const w of ws) {
+        if (ctx.measureText(w).width > maxW) {
+          if (cur) { lines.push(cur); cur = ''; }
+          let chunk = '';
+          for (const ch of w) {
+            const probe = chunk + ch;
+            if (ctx.measureText(probe).width > maxW && chunk) { lines.push(chunk); chunk = ch; }
+            else chunk = probe;
+          }
+          cur = chunk;
+        } else {
+          const test = cur ? cur + ' ' + w : w;
+          if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+          else cur = test;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    }
+    while (fitSize >= 7) {
+      lineH = fitSize * 1.55; ctx.font = `700 ${fitSize}px Caveat`;
+      wLines = wrapWords(words, textW);
+      if (wLines.length * lineH <= contentH) break;
+      fitSize--;
+    }
+
+    // Subtle seed-based jitter for hand-placed feel
+    initRng(masterSeed);
+    const rot = (rng() - 0.5) * 0.025;
+
+    ctx.save();
+    ctx.translate(pad + hw, pad + ht);
+    ctx.rotate(rot);
+
+    ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 22;
+    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 8;
+    ctx.globalAlpha = 0.97; ctx.fillStyle = chipColor;
+    ctx.fillRect(-hw, -ht, noteS, noteS);
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+    ctx.globalAlpha = 0.30; ctx.strokeStyle = textColor;
+    ctx.lineWidth = Math.max(0.8, noteS * 0.006);
+    ctx.strokeRect(-hw + border, -ht + border, noteS - border*2, noteS - border*2);
+
+    const sepY = -ht + headerH;
+    ctx.beginPath(); ctx.moveTo(-hw + padX, sepY); ctx.lineTo(hw - padX, sepY);
+    ctx.strokeStyle = textColor; ctx.lineWidth = Math.max(0.6, noteS * 0.004);
+    ctx.globalAlpha = 0.30; ctx.stroke();
+
+    ctx.globalAlpha = 0.55; ctx.fillStyle = textColor;
+    ctx.font = `700 ${Math.max(9, labelSize * 1.8)}px -apple-system,BlinkMacSystemFont,sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('NOTE', -hw + padX, -ht + headerH * 0.52);
+
+    const midContent = (sepY + padVert + ht - padVert) / 2;
+    const textStartY = midContent - (wLines.length * lineH) / 2 + lineH / 2;
+    ctx.globalAlpha = 1; ctx.fillStyle = textColor;
+    ctx.font = `700 ${fitSize}px Caveat`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    wLines.forEach((l, i) => ctx.fillText(l, 0, textStartY + i * lineH));
+    ctx.restore();
+
+    const cx = postitCX !== null ? postitCX : pw / 2;
+    const cy = postitCY !== null ? postitCY : ph / 2;
+
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      position:absolute; left:${cx - cw/2}px; top:${cy - ch/2}px;
+      width:${cw}px; height:${ch}px;
+      cursor:grab; user-select:none; touch-action:none; pointer-events:auto;
+      transform:rotate(${postitRot}deg); transform-origin:center center;
+    `;
+    wrapper.appendChild(canvas);
+
+    // Rotate handle — sits exactly at the visual top-right corner of the note
+    const rotHandle = document.createElement('div');
+    rotHandle.className = 'postit-rot-handle';
+    rotHandle.textContent = '↻';
+    // pad offsets the visual note inside the wrapper; place handle at the note's corner
+    rotHandle.style.top   = (pad) + 'px';
+    rotHandle.style.right = (pad) + 'px';
+    wrapper.appendChild(rotHandle);
+    _activeRotHandle = rotHandle;  // track for outside-tap hiding
+
+    bgLayer.appendChild(wrapper);
+
+    // ── Drag to move ──
+    let dragging = false, dSX, dSY, dOL, dOT;
+    wrapper.addEventListener('pointerdown', e => {
+      if (e.target === rotHandle) return;
+      // Show handle when tapping the post-it
+      rotHandle.style.display = 'flex';
+      dragging = true; dSX = e.clientX; dSY = e.clientY;
+      dOL = parseFloat(wrapper.style.left); dOT = parseFloat(wrapper.style.top);
+      wrapper.setPointerCapture(e.pointerId);
+      wrapper.style.cursor = 'grabbing';
+    });
+    wrapper.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const l = dOL + (e.clientX - dSX), t = dOT + (e.clientY - dSY);
+      wrapper.style.left = l + 'px'; wrapper.style.top = t + 'px';
+      postitCX = l + cw / 2; postitCY = t + ch / 2;
+    });
+    wrapper.addEventListener('pointerup',     () => { dragging = false; wrapper.style.cursor = 'grab'; });
+    wrapper.addEventListener('pointercancel', () => { dragging = false; wrapper.style.cursor = 'grab'; });
+
+    // ── Drag handle: rotate + scale ──
+    let gesturing = false, gStartAngle, gStartRot, gStartDist, gStartScale;
+
+    function getCenterAndAngle(e) {
+      const rect = wrapper.getBoundingClientRect();
+      const cx = rect.left + rect.width  / 2;
+      const cy = rect.top  + rect.height / 2;
+      const angle = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+      const dist  = Math.hypot(e.clientX - cx, e.clientY - cy);
+      return { angle, dist };
+    }
+
+    rotHandle.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      gesturing = true;
+      const { angle, dist } = getCenterAndAngle(e);
+      gStartAngle = angle;
+      gStartRot   = postitRot;
+      gStartDist  = dist || 1;
+      gStartScale = postitScale;
+      rotHandle.setPointerCapture(e.pointerId);
+      rotHandle.style.cursor = 'grabbing';
+    });
+
+    rotHandle.addEventListener('pointermove', e => {
+      if (!gesturing) return;
+      const { angle, dist } = getCenterAndAngle(e);
+      const newRot   = gStartRot + (angle - gStartAngle);
+      const newScale = Math.max(0.20, Math.min(3.0, gStartScale * (dist / gStartDist)));
+      postitRot   = newRot;
+      postitScale = newScale;
+      wrapper.style.transform = `rotate(${newRot}deg) scale(${newScale / gStartScale})`;
+    });
+
+    rotHandle.addEventListener('pointerup', () => {
+      gesturing = false;
+      rotHandle.style.cursor = 'grab';
+      postitRot = ((postitRot % 360) + 540) % 360 - 180;
+      // Re-bake canvas at new scale, reset CSS scale to 1
+      renderBg();
+    });
+
+    rotHandle.addEventListener('pointercancel', () => {
+      gesturing = false;
+      renderBg();
+    });
+  }
+
+  function renderOverlay(text, opacity, fontSize) {
+    const sp = document.createElement('div');
+    Object.assign(sp.style, {
+      position: 'absolute', inset: '0',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Caveat',cursive", fontWeight: '800',
+      fontSize: 'clamp(48px,10vw,110px)',
+      textAlign: 'center', lineHeight: '1', letterSpacing: '-2px',
+      color: chipColor, opacity, padding: '24px', wordBreak: 'break-word',
+      pointerEvents: 'none',
+      transform: (bgOffsetX !== 0 || bgOffsetY !== 0) ? `translateX(${bgOffsetX}%) translateY(${bgOffsetY}%)` : '',
+    });
+    sp.textContent = text;
+    bgLayer.appendChild(sp);
+  }
+
+  async function renderChips(text, opacity, fontSize) {
+    try { await document.fonts.load(`700 ${fontSize}px Caveat`); } catch(e) {}
+
+    const page = document.getElementById('page');
+    const pw   = page.offsetWidth  || 720;
+    const ph   = page.offsetHeight || 480;
+
+    // ── Measuring context (used for text width only) ──
+    const measureCanvas = document.createElement('canvas');
+    const mCtx = measureCanvas.getContext('2d');
+    mCtx.font = `700 ${fontSize}px Caveat`;
+
+    /* Words flow left-to-right, wrap to next row only when line is full.
+       Manual newlines in the input always force a new chip row. */
+    const chipGapEst = Math.round(fontSize * 0.20);
+    const capEst     = fontSize * 0.615 * 2;
+    const padXEst    = 0;
+    const maxLineW   = (pw - 40) * (lineWidthPct / 100);
+
+    const lines = [];
+    text.split(/\n/).forEach(segment => {
+      const segWords = segment.split(/\s+/).filter(Boolean);
+      if (segWords.length === 0) return;
+      let line = [], lineW = 0;
+      segWords.forEach(w => {
+        const ww   = mCtx.measureText(w).width + padXEst + capEst;
+        const addW = line.length === 0 ? ww : chipGapEst + ww;
+        if (line.length > 0 && lineW + addW > maxLineW) {
+          lines.push([...line]); line = []; lineW = 0;
+        }
+        line.push(w);
+        lineW += (line.length === 1 ? 0 : chipGapEst) + ww;
+      });
+      if (line.length) lines.push(line);
+    });
+
+    const chipH  = chipStyle === 'highlight' ? Math.round(fontSize * 0.90)
+                 : chipStyle === 'postit'    ? Math.round(fontSize * 1.40)
+                 :                            Math.round(fontSize * 1.25);
+    const gapV   = chipStyle === 'highlight' ? Math.round(chipH * 0.20)
+                 : chipStyle === 'postit'    ? Math.round(chipH * 0.38)
+                 :                            Math.round(chipH * 0.30);
+    const blockH = lines.length * (chipH + gapV) - gapV;
+    let   yBase  = (ph - blockH) / 2 + bgOffsetY / 100 * ph;
+    yBase = Math.max(chipH * 0.5, yBase);
+
+    initRng(masterSeed + text.split('').reduce((a,c) => a + c.charCodeAt(0), 0));
+
+    const tc = getTextColor();
+
+    // ── Phase 1: Collect all chip geometry + save RNG state before each draw ──
+    const allChips = [];
+    lines.forEach((lineWords, li) => {
+      const chipGap    = Math.round(fontSize * 0.20);
+      const textWidths = lineWords.map(w => mCtx.measureText(w).width);
+      const padXArr    = lineWords.map(() => 0);
+      const padYArr    = lineWords.map(() => fontSize * (0.08 + rng() * 0.07));
+      const rArr       = padYArr.map(pY => fontSize / 2 + pY);
+      const chipWidths = textWidths.map((tw, i) =>
+        chipStyle === 'highlight' ? tw + fontSize * 0.20
+        : chipStyle === 'postit'  ? tw + fontSize * 0.68
+        :                           tw + 2 * padXArr[i] + 2 * rArr[i]
+      );
+      const totalLineW = chipWidths.reduce((a,b) => a+b, 0) + chipGap*(lineWords.length-1);
+      let curX = (pw - totalLineW) / 2 + bgOffsetX / 100 * pw;
+      const rowY   = yBase + li * (chipH + gapV);
+      const rowJitY = rngSigned() * chipH * 0.18;
+
+      lineWords.forEach((word, wi) => {
+        const cw   = chipWidths[wi];
+        const tw   = textWidths[wi];
+        const jitY = rowJitY + rngSigned() * chipH * 0.06;
+        const rot  = chipStyle === 'highlight' ? rngSigned() * 0.032
+                   : chipStyle === 'postit'    ? rngSigned() * 0.130
+                   :                            rngSigned() * 0.105;
+        const cx = curX + cw / 2;
+        const cy = rowY + chipH / 2 + jitY;
+
+        const wordIndex = lines.slice(0, li).reduce((s, l) => s + l.length, 0) + wi;
+        const palIdx    = (wordIndex + paletteOffset) % palette.length;
+        const wChip     = multiColor ? palette[palIdx][0] : chipColor;
+        const wText     = multiColor ? palette[palIdx][1] : tc;
+        const wHex      = wChip.replace('#', '');
+        const [wr,wg,wb]= [0,2,4].map(i => parseInt(wHex.slice(i,i+2),16)/255);
+        const wLuma     = 0.299*wr + 0.587*wg + 0.114*wb;
+
+        // Save RNG state just before the draw function consumes it
+        const preDrawRng = _s;
+
+        // Advance RNG past the draw function's internal calls
+        if      (chipStyle === 'highlight') { for (let _=0; _<42; _++) rng(); }
+        else if (chipStyle === 'postit')    { for (let _=0; _<5;  _++) rng(); }
+        else                                { for (let _=0; _<6;  _++) rng(); }
+
+        allChips.push({ cx, cy, cw, tw, rot, padX: padXArr[wi], padY: padYArr[wi],
+                        word, wChip, wText, wLuma, preDrawRng });
+        curX += cw + chipGap;
+      });
+    });
+
+    // ── Shared inner draw helper (ctx already translated to chip center) ──
+    function _drawChip(ctx, chip) {
+      _s = chip.preDrawRng;
+      ctx.rotate(chip.rot);
+
+      if (chipStyle === 'highlight') {
+        ctx.shadowColor = 'rgba(0,0,0,0.06)'; ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1;
+        drawHighlight(ctx, chip.tw, fontSize, chip.wChip);
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+      } else if (chipStyle === 'postit') {
+        ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 9;
+        ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
+        drawPostit(ctx, chip.tw, fontSize, chip.wChip);
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+      } else {
+        ctx.shadowColor = 'rgba(0,0,0,0.13)'; ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
+        drawOrganicBlob(ctx, chip.tw, fontSize, chip.padX, chip.padY, chip.word.length);
+        ctx.globalAlpha = opacity; ctx.fillStyle = chip.wChip; ctx.fill();
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+        if (chip.wLuma > 0.55) {
+          ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 1; ctx.stroke();
+        }
+      }
+
+      ctx.globalAlpha = 1; ctx.fillStyle = chip.wText;
+      ctx.font = `700 ${fontSize}px Caveat`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(chip.word, 0, 1);
+    }
+
+    // ── Helper: build a positioned mini canvas for one chip ──
+    function _makeMiniCanvas(chip, animPad) {
+      const dpr   = devicePixelRatio;
+      const miniW = Math.ceil(chip.cw) + animPad * 2;
+      const miniH = chipH + animPad * 2;
+      const mc    = document.createElement('canvas');
+      mc.width  = miniW * dpr;
+      mc.height = miniH * dpr;
+      mc.style.cssText = `width:${miniW}px;height:${miniH}px;display:block;`;
+      const mCtx2 = mc.getContext('2d');
+      mCtx2.scale(dpr, dpr);
+      mCtx2.save();
+      mCtx2.translate(miniW / 2, miniH / 2);
+      _drawChip(mCtx2, chip);
+      mCtx2.restore();
+      return { mc, miniW, miniH };
+    }
+
+    // ── Phase 2a: Static — one shared canvas ──
+    if (animMode === 'off') {
+      const canvas = document.createElement('canvas');
+      canvas.width  = pw * devicePixelRatio;
+      canvas.height = ph * devicePixelRatio;
+      canvas.style.width  = pw + 'px';
+      canvas.style.height = ph + 'px';
+      bgLayer.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+      allChips.forEach(chip => {
+        ctx.save();
+        ctx.translate(chip.cx, chip.cy);
+        _drawChip(ctx, chip);
+        ctx.restore();
+      });
+
+    // ── Phase 2b: Bounce — slide in from left, word by word ──
+    } else if (animMode === 'bounce') {
+      const animPad = Math.ceil(fontSize * 0.9);
+      allChips.forEach((chip, idx) => {
+        const { mc, miniW, miniH } = _makeMiniCanvas(chip, animPad);
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = [
+          'position:absolute',
+          `left:${chip.cx - miniW / 2}px`,
+          `top:${chip.cy - miniH / 2}px`,
+          `width:${miniW}px`, `height:${miniH}px`,
+          'pointer-events:none',
+          'animation:chipBounceIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both',
+          `animation-delay:${idx * 65}ms`,
+        ].join(';');
+        wrapper.appendChild(mc);
+        bgLayer.appendChild(wrapper);
+      });
+
+    // ── Phase 2c: Sparkle — pop + scatter star particles ──
+    } else if (animMode === 'sparkle') {
+      const animPad   = Math.ceil(fontSize * 0.9);
+      const sparkDist = Math.max(fontSize * 1.1, chipH * 0.85);
+      // 8 evenly-spaced directions for particles
+      const ANGLES    = [0, 45, 90, 135, 180, 225, 270, 315];
+
+      allChips.forEach((chip, idx) => {
+        const { mc, miniW, miniH } = _makeMiniCanvas(chip, animPad);
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = [
+          'position:absolute',
+          `left:${chip.cx - miniW / 2}px`,
+          `top:${chip.cy - miniH / 2}px`,
+          `width:${miniW}px`, `height:${miniH}px`,
+          'pointer-events:none', 'overflow:visible',
+          'animation:chipSparkleIn 0.48s cubic-bezier(0.34,1.56,0.64,1) both',
+          `animation-delay:${idx * 60}ms`,
+        ].join(';');
+        wrapper.appendChild(mc);
+
+        // Star particles — alternate chip and text color
+        const particleColors = [chip.wText, chip.wChip, '#fff', chip.wText, chip.wChip, '#fff', chip.wText, chip.wChip];
+        ANGLES.forEach((deg, pi) => {
+          const rad = deg * Math.PI / 180;
+          const pdx = Math.round(Math.cos(rad) * sparkDist);
+          const pdy = Math.round(Math.sin(rad) * sparkDist);
+          const sz  = 3 + (pi % 3);   // 3, 4 or 5 px
+          const p   = document.createElement('div');
+          p.style.cssText = [
+            'position:absolute',
+            `left:calc(50% - ${sz / 2}px)`,
+            `top:calc(50% - ${sz / 2}px)`,
+            `width:${sz}px`, `height:${sz}px`,
+            'border-radius:50%',
+            `background:${particleColors[pi]}`,
+            'pointer-events:none',
+            `--pdx:${pdx}px`, `--pdy:${pdy}px`,
+            'animation:starParticle 0.62s ease-out both',
+            `animation-delay:${idx * 60 + 140}ms`,
+          ].join(';');
+          wrapper.appendChild(p);
+        });
+
+        bgLayer.appendChild(wrapper);
+      });
+
+    // ── Phase 2d: Typing — chips reveal left-to-right, one word at a time ──
+    } else if (animMode === 'typing') {
+      const animPad  = Math.ceil(fontSize * 0.9);
+      const CHAR_MS  = 60;    // ms per character
+      const MIN_MS   = 160;   // minimum duration even for short words
+      let   typeDelay = 0;
+
+      allChips.forEach((chip) => {
+        const { mc, miniW, miniH } = _makeMiniCanvas(chip, animPad);
+        const typeMs = Math.max(MIN_MS, chip.word.length * CHAR_MS);
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = [
+          'position:absolute',
+          `left:${chip.cx - miniW / 2}px`,
+          `top:${chip.cy - miniH / 2}px`,
+          `width:${miniW}px`, `height:${miniH}px`,
+          'pointer-events:none',
+          `animation:chipReveal ${typeMs}ms linear both`,
+          `animation-delay:${typeDelay}ms`,
+        ].join(';');
+
+        typeDelay += typeMs;   // next chip starts when this one finishes
+        wrapper.appendChild(mc);
+        bgLayer.appendChild(wrapper);
+      });
+    }
+  }
+
+
+  function clearEditor() {
+    if (confirm('Clear all content?')) { editor.value = ''; updateCount(); }
+  }
+
+  function copyAll() {
+    const btn = document.querySelector('.btn-ghost');
+    navigator.clipboard.writeText(editor.value)
+      .then(() => { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500); });
+  }
+
+  function downloadTxt() {
+    const blob = new Blob([editor.value], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = (document.querySelector('.doc-title').value || 'document') + '.txt';
+    a.click();
+  }
+
+  /* ── Word / char count ── */
+  editor.addEventListener('input', updateCount);
+  function updateCount() {
+    const t = editor.value.trim();
+    document.getElementById('wordCount').textContent = t ? t.split(/\s+/).filter(Boolean).length : 0;
+    document.getElementById('charCount').textContent = t.length;
+  }
+
+
+
+
+  const ro = new ResizeObserver(() => renderBg());
+  ro.observe(document.getElementById('page'));
+  ro.observe(document.querySelector('.page-frame'));
+
+  // Rotating default background chip texts
+  const BG_TEXT_PRESETS = [
+    "Today is so\ngooooooooood",
+    "Happy Birthday! Wishing you a day filled with love, laughter, and your favorite things. May this next year bring you happiness, success, and many wonderful memories. Take time to celebrate yourself and enjoy every moment of your special day.",
+    "Merry Christmas! May your home be filled with warmth, joy, and sparkling holiday lights. Wishing you peaceful moments, good food, and laughter shared with the people you love. May the magic of the season stay with you all year long.",
+    "Happy Valentine's Day!\nYou make my world brighter every day.",
+    "Happy Mother's Day!\nThank you for all the love\nand care you give.",
+    "Celebrating you today\nand wishing you a year full of\namazing moments.",
+    "Sending lots of love\nand warm wishes your way.",
+    "Merry Christmas",
+    "May your days be warm,\njoyful, and bright",
+    "Love & Happiness",
+  ];
+  let bgPresetIndex = 0;
+  let _photoQuotes  = [];   // all quotes for the current photo's mood
+  let _photoQuoteIdx = -1;  // which one was last shown
+
+  function resetBgText() {
+    const hasPhoto = !!document.getElementById('photoBg').style.backgroundImage.trim();
+    if (hasPhoto && _photoQuotes.length) {
+      // Cycle through photo-mood quotes, skip the one currently shown
+      _photoQuoteIdx = (_photoQuoteIdx + 1) % _photoQuotes.length;
+      const [title, desc] = _photoQuotes[_photoQuoteIdx];
+      document.getElementById('bgInput').value = `${title}\n${desc}`;
+    } else {
+      bgPresetIndex = (bgPresetIndex + 1) % BG_TEXT_PRESETS.length;
+      document.getElementById('bgInput').value = BG_TEXT_PRESETS[bgPresetIndex];
+    }
+    renderBg();
+  }
+
+  document.getElementById('bgInput').value = BG_TEXT_PRESETS[0];
+
+  // ── Photo background + color extraction ──
+
+  function colorDistSq([r1,g1,b1], [r2,g2,b2]) {
+    return (r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2;
+  }
+
+  // Color helpers for photo palette variants
+  function hexToRgb(hex) {
+    return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  }
+  function rgbToHex(r,g,b) {
+    return '#' + [r,g,b].map(v => Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+  }
+  function lerpColor(hex, target, t) {
+    const [r1,g1,b1] = hexToRgb(hex), [r2,g2,b2] = hexToRgb(target);
+    return rgbToHex(r1+(r2-r1)*t, g1+(g2-g1)*t, b1+(b2-b1)*t);
+  }
+  function textPairFor(hex) {
+    const [r,g,b] = hexToRgb(hex);
+    return (0.299*r + 0.587*g + 0.114*b)/255 > 0.55 ? '#1A1A1A' : '#F5F0E8';
+  }
+
+  function extractPhotoColors(dataUrl, cb) {
+    const img = new Image();
+    img.onload = () => {
+      const size = 100;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+
+      // Collect opaque pixels
+      const pixels = [];
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i+3] < 128) continue;
+        pixels.push([data[i], data[i+1], data[i+2]]);
+      }
+      if (!pixels.length) { cb([]); return; }
+
+      // k-means, k=7
+      const k = 5;
+      const step = Math.max(1, Math.floor(pixels.length / k));
+      let centroids = Array.from({length: k}, (_, i) => [...pixels[Math.min(i * step, pixels.length - 1)]]);
+
+      for (let iter = 0; iter < 10; iter++) {
+        const clusters = Array.from({length: k}, () => []);
+        for (const px of pixels) {
+          let best = 0, bestD = Infinity;
+          for (let j = 0; j < k; j++) {
+            const d = colorDistSq(px, centroids[j]);
+            if (d < bestD) { bestD = d; best = j; }
+          }
+          clusters[best].push(px);
+        }
+        centroids = clusters.map((cl, j) => {
+          if (!cl.length) return centroids[j];
+          const s = cl.reduce((a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]], [0,0,0]);
+          return [s[0]/cl.length, s[1]/cl.length, s[2]/cl.length];
+        });
+      }
+
+      // Sort by cluster size (most dominant first) — re-assign to get sizes
+      const sizes = new Array(k).fill(0);
+      for (const px of pixels) {
+        let best = 0, bestD = Infinity;
+        for (let j = 0; j < k; j++) {
+          const d = colorDistSq(px, centroids[j]);
+          if (d < bestD) { bestD = d; best = j; }
+        }
+        sizes[best]++;
+      }
+      const sorted = centroids.map((c, i) => ({c, size: sizes[i]}))
+        .sort((a, b) => b.size - a.size)
+        .map(({c: [r,g,b]}) => {
+          const hex = rgbToHex(r,g,b);
+          return { c: hex, pair: textPairFor(hex) };
+        });
+
+      cb(sorted);
+    };
+    img.src = dataUrl;
+  }
+
+  function buildPhotoPalette(colors) {
+    if (!colors.length) return;
+
+    // colors[0] = most dominant (largest cluster), rest are the other 4
+    const [main, ...rest] = colors.slice(0, 5);
+    const swatches = [], pal = [];
+
+    // Main color → 3 shades: lighter, original, darker
+    // Skip shades if color is near-white or near-black (not useful)
+    const [mr, mg, mb] = hexToRgb(main.c);
+    const mainLum = (0.299*mr + 0.587*mg + 0.114*mb) / 255;
+    const doShades = mainLum > 0.12 && mainLum < 0.88;
+
+    if (doShades) {
+      const lighter = lerpColor(main.c, '#FFFFFF', 0.42);
+      const darker  = lerpColor(main.c, '#000000', 0.35);
+      swatches.push(
+        { c: lighter,  pair: textPairFor(lighter), title: 'Photo Light' },
+        { c: main.c,   pair: main.pair,            title: 'Photo Main'  },
+        { c: darker,   pair: textPairFor(darker),  title: 'Photo Dark'  },
+      );
+      pal.push(
+        [lighter, textPairFor(lighter)], [textPairFor(lighter), lighter],
+        [main.c,  main.pair],            [main.pair, main.c],
+        [darker,  textPairFor(darker)],  [textPairFor(darker),  darker],
+      );
+    } else {
+      swatches.push({ c: main.c, pair: main.pair, title: 'Photo Main' });
+      pal.push([main.c, main.pair], [main.pair, main.c]);
+    }
+
+    // Remaining 4 colors — single swatch each
+    rest.forEach(({c, pair}, i) => {
+      swatches.push({ c, pair, title: `Photo ${i + 2}` });
+      pal.push([c, pair], [pair, c]);
+    });
+
+    paletteSets.photo = { swatches, palette: pal };
+
+    // If already in highlight mode, refresh swatches to include new photo colors
+    if (chipStyle === 'highlight') loadHighlightSwatches();
+
+    // Add tab if not present
+    let tab = document.getElementById('paletteTabPhoto');
+    if (!tab) {
+      tab = document.createElement('button');
+      tab.className = 'palette-tab';
+      tab.id = 'paletteTabPhoto';
+      tab.textContent = '📷 Photo';
+      tab.onclick = function() { switchPalette('photo', this); };
+      document.getElementById('paletteTabs').appendChild(tab);
+    }
+    switchPalette('photo', tab);
+  }
+
+  // ── Pixel-level content detection ──
+  function isSkinTone(r, g, b) {
+    if (r < 50) return false;
+    // Light to medium skin
+    if (r > 95 && g > 40 && b > 20 &&
+        Math.max(r,g,b) - Math.min(r,g,b) > 15 &&
+        r > g && r > b && r - g > 10) return true;
+    // Medium to dark skin
+    if (r > 60 && r < 220 && r > g && r > b &&
+        r - b > 10 && r - g >= 2 &&
+        g > 30 && b > 15) return true;
+    return false;
+  }
+
+  function analyzePhotoContent(dataUrl, cb) {
+    const img = new Image();
+    img.onload = () => {
+      const size = 120;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+
+      let skin = 0, green = 0, total = 0;
+      let skyBlue = 0, skyGrey = 0, skyDark = 0, skyTotal = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+        if (a < 128) continue;
+        total++;
+        const row = Math.floor((i / 4) / size);
+        const isTop = row < size * 0.38;
+
+        if (isSkinTone(r, g, b)) skin++;
+        if (g > 70 && g > r * 1.08 && g > b * 1.08 && g - Math.min(r,b) > 25) green++;
+
+        if (isTop) {
+          skyTotal++;
+          const mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+          if (b > 100 && b > r * 1.15 && b >= g * 0.85 && mx - mn > 20) skyBlue++;
+          else if (mx > 140 && mx - mn < 35) skyGrey++;
+          else if (mx < 65) skyDark++;
+        }
+      }
+
+      const n = total || 1, st = skyTotal || 1;
+      const skinRatio  = skin  / n;
+      const greenRatio = green / n;
+      const skyBlueR   = skyBlue / st;
+      const skyGreyR   = skyGrey / st;
+      const skyDarkR   = skyDark / st;
+
+      const hasPeople  = skinRatio  > 0.06;
+      const hasNature  = greenRatio > 0.20;
+      const weather    = skyBlueR > 0.22 ? 'sunny'
+                       : skyDarkR > 0.45 ? 'night'
+                       : skyGreyR > 0.28 ? 'cloudy' : 'neutral';
+
+      cb({ hasPeople, hasNature, weather, skinRatio, greenRatio });
+    };
+    img.src = dataUrl;
+  }
+
+  function suggestPhotoText(colors, content = {}) {
+    if (!colors.length) return;
+
+    // Overall brightness / warmth from palette
+    let tR = 0, tG = 0, tB = 0;
+    colors.forEach(({c}) => { const [r,g,b] = hexToRgb(c); tR+=r; tG+=g; tB+=b; });
+    const n = colors.length;
+    const lum  = (0.299*tR/n + 0.587*tG/n + 0.114*tB/n) / 255;
+    const warm = (tR/n - tB/n) / 255;
+    const bright = lum > 0.42, warmth = warm > 0.04;
+
+    // ── Content-aware quote pools ──
+    const pools = {
+
+      // People detected
+      people_sunny:  [
+        ['Happy Faces',   'Keep these ones close, they make everything better.'],
+        ['Good People',   'The ones who show up and make the whole day worth it.'],
+        ['Together',      'This is what it looks like when everyone is present.'],
+      ],
+      people_cloudy: [
+        ['Still Good',    'Grey skies, good company — nothing to complain about.'],
+        ['Here We Are',   'Anywhere feels right with the right people around.'],
+        ['Our Days',      'Not every day is perfect but these people make it close.'],
+      ],
+      people_night:  [
+        ['Good Company',  'Nothing better than the right people in the right place.'],
+        ['These People',  'Worth every late night and every slow morning after.'],
+        ['Night Crew',    'The ones who make staying out feel like staying home.'],
+      ],
+      people_warm:   [
+        ['Golden Crew',   'The ones who make every ordinary moment feel like gold.'],
+        ['Close Friends', 'Warm, loud, and exactly what I needed today.'],
+        ['Full House',    'This kind of energy is something you want to bottle up.'],
+      ],
+
+      // Nature / outdoors
+      nature_sunny:  [
+        ['Out There',     'Some places just feel like freedom the moment you arrive.'],
+        ['Fresh Air',     'The best days always seem to start outside somewhere.'],
+        ['Good Spot',     'Found it, loved it, and never wanted to leave.'],
+      ],
+      nature_cloudy: [
+        ['Out Anyway',    'Weather never stopped a good walk or a good story.'],
+        ['Still Beautiful','Even the grey days have somewhere they want to take you.'],
+        ['Quiet Outside', 'The world was calm out there and so were we.'],
+      ],
+      nature_night:  [
+        ['Under Stars',   'Some nights you just have to go outside and look up.'],
+        ['Night Walk',    'The world gets quieter after dark and that is a good thing.'],
+        ['Late Outside',  'Out here long after we should have gone home.'],
+      ],
+
+      // Night / urban (no strong nature or people signal)
+      night_vivid:   [
+        ['Night Out',     'The kind of night you end up talking about for years.'],
+        ['After Dark',    'Something about the night makes everything feel alive.'],
+        ['Stay Up',       'Some stories only start after everything else goes quiet.'],
+      ],
+      night_muted:   [
+        ['Still Here',    'Just me and everything I quietly want to remember.'],
+        ['Inner World',   'Sometimes the quietest moments carry the most weight.'],
+        ['Far Away',      'Lost in thought and somehow finding something good there.'],
+      ],
+
+      // Bright warm — sunny lifestyle, golden hour
+      bright_warm:   [
+        ['Good Day',      'The kind you want to live all over again from the start.'],
+        ['Golden Days',   'Keep this one close — it was a really good one.'],
+        ['Feeling Good',  'Some days just hit different and this was one of them.'],
+      ],
+
+      // Bright cool — airy, open, calm
+      bright_cool:   [
+        ['Our Story',     'Still writing the best parts, one slow day at a time.'],
+        ['Easy Days',     'No rush, no plans, just here and happy about it.'],
+        ['Collect Memories', 'The simple ones are always the ones that stay longest.'],
+      ],
+
+      // Soft / muted warm — cosy, slow
+      soft_warm:     [
+        ['Small Moments', 'The quiet ones are always the ones worth keeping most.'],
+        ['Right Here',    'Nothing fancy — just exactly where I wanted to be.'],
+        ['Full Heart',    'Nothing extra needed, this was already more than enough.'],
+      ],
+
+      // Dark / muted cool — moody, reflective
+      dark_cool:     [
+        ['Deep Roots',    'The people and places that quietly shape who you are.'],
+        ['Slow Days',     'Learning to love the in-between moments most of all.'],
+        ['Into the Depth','There is beauty in everything that is still and quiet.'],
+      ],
+    };
+
+    // Pick the most relevant pool based on content signals
+    const { hasPeople, hasNature, weather } = content;
+
+    let pool;
+    if (hasPeople) {
+      pool = weather === 'sunny'  ? pools.people_sunny
+           : weather === 'cloudy' ? pools.people_cloudy
+           : weather === 'night'  ? pools.people_night
+           :                        pools.people_warm;
+    } else if (hasNature) {
+      pool = weather === 'sunny'  ? pools.nature_sunny
+           : weather === 'cloudy' ? pools.nature_cloudy
+           : weather === 'night'  ? pools.nature_night
+           : bright && warmth     ? pools.nature_sunny
+           :                        pools.nature_cloudy;
+    } else if (weather === 'night' || (!bright && !warmth)) {
+      const mx = Math.max(tR/n,tG/n,tB/n)/255;
+      const mn = Math.min(tR/n,tG/n,tB/n)/255;
+      const sat = mx > 0 ? (mx-mn)/mx : 0;
+      pool = sat > 0.28 ? pools.night_vivid : pools.night_muted;
+    } else if (bright && warmth) {
+      pool = pools.bright_warm;
+    } else if (bright && !warmth) {
+      pool = pools.bright_cool;
+    } else if (!bright && warmth) {
+      pool = pools.soft_warm;
+    } else {
+      pool = pools.dark_cool;
+    }
+
+    _photoQuotes   = [...pool];
+    _photoQuoteIdx = Math.floor(Math.random() * _photoQuotes.length);
+    const [title, desc] = _photoQuotes[_photoQuoteIdx];
+    document.getElementById('bgInput').value = `${title}\n${desc}`;
+    renderBg();
+  }
+
+  function loadPhotoFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const photoBg   = document.getElementById('photoBg');
+    const removeBtn = document.getElementById('photoRemoveBtn');
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      photoBg.style.backgroundImage = `url('${dataUrl}')`;
+      removeBtn.style.display = 'block';
+      // Run color extraction and content analysis in parallel
+      let colors = null, content = null;
+      const tryGenerate = () => {
+        if (colors !== null && content !== null) {
+          buildPhotoPalette(colors);
+          suggestPhotoText(colors, content);
+        }
+      };
+      extractPhotoColors(dataUrl, c => { colors = c;   tryGenerate(); });
+      analyzePhotoContent(dataUrl, c => { content = c; tryGenerate(); });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removePhoto() {
+    document.getElementById('photoBg').style.backgroundImage = '';
+    document.getElementById('photoRemoveBtn').style.display = 'none';
+    document.getElementById('photoInput').value = '';
+    _photoQuotes = []; _photoQuoteIdx = -1; // reset to preset cycling
+    // Remove photo palette tab and switch back to earth
+    const tab = document.getElementById('paletteTabPhoto');
+    if (tab) tab.remove();
+    delete paletteSets.photo;
+    if (chipStyle === 'highlight') { loadHighlightSwatches(); renderBg(); return; }
+    const earthTab = document.querySelector('#paletteTabs .palette-tab');
+    if (earthTab) switchPalette('earth', earthTab);
+  }
+
+  // Drag-and-drop: use enter counter to avoid misfires from child elements
+  let _dragCount = 0;
+  const _page = document.getElementById('page');
+  _page.addEventListener('dragenter', e => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes('Files')) {
+      _dragCount++;
+      _page.classList.add('drag-over');
+    }
+  });
+  _page.addEventListener('dragover', e => { e.preventDefault(); });
+  _page.addEventListener('dragleave', () => {
+    _dragCount--;
+    if (_dragCount <= 0) { _dragCount = 0; _page.classList.remove('drag-over'); }
+  });
+  _page.addEventListener('drop', e => {
+    e.preventDefault();
+    _dragCount = 0;
+    _page.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadPhotoFile(file);
+  });
+
+  // ── Drag-to-reposition text (chip / overlay modes) ──
+  let _textDrag = false, _tdX, _tdY, _tdOrigX, _tdOrigY;
+
+  _page.addEventListener('pointerdown', e => {
+    if (chipStyle === 'postit') return;                       // postit has its own drag
+    if (e.target.closest('button')) return;                   // ignore button clicks
+    if (e.pointerType === 'mouse' && e.button !== 0) return;  // left-click only
+    _textDrag = true;
+    _tdX = e.clientX; _tdY = e.clientY;
+    _tdOrigX = bgOffsetX; _tdOrigY = bgOffsetY;
+    _page.setPointerCapture(e.pointerId);
+    _page.style.cursor = 'grabbing';
+  });
+
+  const _snapThreshold = 4; // % — snaps when within this distance of center
+  const _snapH = document.getElementById('snapH');
+  const _snapV = document.getElementById('snapV');
+
+  function _hideGuides() {
+    _snapH.classList.remove('visible');
+    _snapV.classList.remove('visible');
+  }
+
+  _page.addEventListener('pointermove', e => {
+    if (!_textDrag) return;
+    const pw = _page.offsetWidth, ph = _page.offsetHeight;
+    let rawX = _tdOrigX + (e.clientX - _tdX) / pw * 100;
+    let rawY = _tdOrigY + (e.clientY - _tdY) / ph * 100;
+
+    // Snap to horizontal center (Y=0)
+    if (Math.abs(rawY) < _snapThreshold) { rawY = 0; _snapH.classList.add('visible'); }
+    else { _snapH.classList.remove('visible'); }
+
+    // Snap to vertical center (X=0)
+    if (Math.abs(rawX) < _snapThreshold) { rawX = 0; _snapV.classList.add('visible'); }
+    else { _snapV.classList.remove('visible'); }
+
+    bgOffsetX = rawX;
+    bgOffsetY = rawY;
+
+    // Keep vertical slider in sync
+    const sl = document.getElementById('bgOffsetSlider');
+    if (sl) sl.value = Math.max(-50, Math.min(50, bgOffsetY));
+    renderBg();
+  });
+
+  _page.addEventListener('pointerup', () => {
+    if (!_textDrag) return;
+    _textDrag = false;
+    _hideGuides();
+    _page.style.cursor = chipStyle !== 'postit' ? 'grab' : '';
+  });
+  _page.addEventListener('pointercancel', () => {
+    _textDrag = false;
+    _hideGuides();
+    _page.style.cursor = chipStyle !== 'postit' ? 'grab' : '';
+  });
+
+  // Double-click to re-center text
+  _page.addEventListener('dblclick', e => {
+    if (chipStyle === 'postit') return;
+    bgOffsetX = 0; bgOffsetY = 0;
+    const sl = document.getElementById('bgOffsetSlider');
+    if (sl) sl.value = 0;
+    renderBg();
+  });
+
+  // Hide post-it rotate handle when tapping outside the canvas
+  document.addEventListener('pointerdown', e => {
+    if (!_activeRotHandle) return;
+    if (!_page.contains(e.target)) {
+      _activeRotHandle.style.display = 'none';
+    }
+  });
+
+  // Set initial grab cursor
+  _page.style.cursor = 'grab';
+
+  updatePreviews();
+  renderBg();
+  editor.focus();
+</script>
+</body>
+</html>
