@@ -1252,6 +1252,8 @@ const bgSize    = document.getElementById('bgSize');
       renderOverlay(rawText, opacity, fontSize);
     } else if (chipStyle === 'postit') {
       await renderPostitNote(rawText, fontSize);
+    } else if (chipStyle === 'newspaper') {
+      await renderNewspaper(rawText, fontSize);
     } else {
       await renderChips(rawText, opacity, fontSize);
     }
@@ -1534,6 +1536,118 @@ const bgSize    = document.getElementById('bgSize');
     });
     sp.textContent = text;
     bgLayer.appendChild(sp);
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     NEWSPAPER / TORN-PAPER RENDER
+     Each input line → one beige kraft strip, slightly misaligned.
+     Per-strip: horizontal jitter + tiny rotation + torn wavy edges
+     + paper grain texture, giving a handmade scrapbook collage feel.
+     RNG per strip: 1 (jitX) + 1 (rot) + 8 (drawNewspaper) = 10 calls.
+  ════════════════════════════════════════════════════════════════ */
+  async function renderNewspaper(text, fontSize) {
+    const NP_FONT = `400 ${fontSize}px "Times New Roman", Georgia, serif`;
+    try { await document.fonts.load(NP_FONT); } catch(e) {}
+
+    const page = document.getElementById('page');
+    const pw   = page.offsetWidth  || 720;
+    const ph   = page.offsetHeight || 720;
+    const dpr  = devicePixelRatio;
+
+    // ── Measure + wrap long lines ──
+    const mc   = document.createElement('canvas');
+    const mCtx = mc.getContext('2d');
+    mCtx.font  = NP_FONT;
+    const maxW = (pw - 40) * Math.min(lineWidthPct / 100, 0.84);
+
+    const lines = [];
+    text.split(/\n/).forEach(seg => {
+      const words = seg.trim().split(/\s+/).filter(Boolean);
+      if (!words.length) return;
+      let cur = '';
+      words.forEach(w => {
+        const test = cur ? cur + ' ' + w : w;
+        if (mCtx.measureText(test).width > maxW && cur) {
+          lines.push(cur); cur = w;
+        } else { cur = test; }
+      });
+      if (cur) lines.push(cur);
+    });
+    if (!lines.length) return;
+
+    // ── Layout ──
+    const stripH = Math.round(fontSize * 1.30);
+    const gapV   = Math.round(fontSize * 0.52);
+    const blockH = lines.length * (stripH + gapV) - gapV;
+    let   yBase  = (ph - blockH) / 2 + bgOffsetY / 100 * ph;
+    yBase = Math.max(stripH * 0.6, yBase);
+
+    initRng(masterSeed + text.split('').reduce((a, c) => a + c.charCodeAt(0), 0));
+
+    // ── Single shared canvas ──
+    const canvas = document.createElement('canvas');
+    canvas.width  = pw * dpr;
+    canvas.height = ph * dpr;
+    canvas.style.cssText = `width:${pw}px;height:${ph}px;display:block;`;
+    bgLayer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    lines.forEach((line, li) => {
+      const tw = mCtx.measureText(line).width;
+
+      // Per-strip jitter: ±13% page width horizontal + slight tilt
+      const maxOff = Math.min(pw * 0.13, fontSize * 4.5);
+      const jitX   = (rng() - 0.5) * 2 * maxOff;          // 1 rng
+      const rot    = (rng() - 0.5) * 0.040;                // 1 rng
+      const cx     = pw / 2 + jitX + bgOffsetX / 100 * pw;
+      const cy     = yBase + li * (stripH + gapV) + stripH / 2;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+
+      // 1 — drop shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.20)';
+      ctx.shadowBlur  = 13; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
+
+      // 2 — torn strip path (8 rng calls)
+      drawNewspaper(ctx, tw, fontSize);
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+      // 3 — base paper fill
+      ctx.globalAlpha = 0.96; ctx.fillStyle = chipColor; ctx.fill();
+
+      // 4 — paper grain (clip to strip; path still active after fill)
+      ctx.save();
+      ctx.clip();
+      const gW = tw + fontSize * 0.9, gH = fontSize * 1.3;
+      for (let i = 0; i < 300; i++) {
+        const gx = (Math.random() - 0.5) * gW;
+        const gy = (Math.random() - 0.5) * gH;
+        const gw = Math.random() * 1.6 + 0.2;
+        const gh = gw * (Math.random() * 3.2 + 0.5);
+        ctx.globalAlpha = 0.018 + Math.random() * 0.052;
+        ctx.fillStyle   = Math.random() > 0.42 ? '#000' : '#fff';
+        ctx.fillRect(gx, gy, gw, gh);
+      }
+      ctx.restore();
+
+      // 5 — edge stroke
+      ctx.globalAlpha = 1;
+      const [pr, pg, pb] = hexToRgb(chipColor);
+      const luma = (0.299*pr + 0.587*pg + 0.114*pb) / 255;
+      ctx.strokeStyle = luma > 0.55 ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.14)';
+      ctx.lineWidth   = 0.8; ctx.stroke();
+
+      // 6 — text
+      ctx.globalAlpha  = 1; ctx.fillStyle = textColor;
+      ctx.font         = NP_FONT;
+      ctx.textAlign    = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(line, 0, 0);
+
+      ctx.restore();
+    });
   }
 
   async function renderChips(text, opacity, fontSize) {
