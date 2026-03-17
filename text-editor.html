@@ -445,10 +445,11 @@
 
   <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="loadPhotoFile(this.files[0])">
   <div class="style-bar">
-    <button id="btnRounded"   class="style-btn active" onclick="setChipStyle('rounded',this)">Rounded</button>
-    <button id="btnHighlight" class="style-btn"        onclick="setChipStyle('highlight',this)">Highlight</button>
-    <button id="btnPostit"    class="style-btn"        onclick="setChipStyle('postit',this)">Post-it</button>
-    <button id="btnNewspaper" class="style-btn"        onclick="setChipStyle('newspaper',this)">Newspaper</button>
+    <button id="btnRounded"      class="style-btn active" onclick="setChipStyle('rounded',this)">Rounded</button>
+    <button id="btnHighlight"    class="style-btn"        onclick="setChipStyle('highlight',this)">Highlight</button>
+    <button id="btnPostit"       class="style-btn"        onclick="setChipStyle('postit',this)">Post-it</button>
+    <button id="btnNewspaper"    class="style-btn"        onclick="setChipStyle('newspaper',this)">Newspaper</button>
+    <button id="btnSelectionBar" class="style-btn"        onclick="setChipStyle('selectionbar',this)">Selection Bar</button>
   </div>
 </div>
 
@@ -847,6 +848,13 @@ const bgSize    = document.getElementById('bgSize');
       paletteTabs.style.display                                         = 'none';
       document.getElementById('hlOpacitySection').style.display        = 'flex';
       loadHighlightSwatches();
+    } else if (s === 'selectionbar') {
+      // Selection bar: keep normal color palette, just show the opacity slider
+      colorLabel.style.display                                          = '';
+      colorModeToggle.style.display                                     = '';
+      paletteTabs.style.display                                         = '';
+      document.getElementById('hlOpacitySection').style.display        = 'flex';
+      document.getElementById('hlTabs').style.display                  = 'none';
     } else {
       // Sync main palette Photo tab from hlTabs: if Photo was active in highlight, restore it
       if (_hlActiveTab === 'photo' && paletteSets.photo) {
@@ -1070,6 +1078,53 @@ const bgSize    = document.getElementById('bgSize');
     ctx.quadraticCurveTo(  0,     ht + mB, -hw,  ht);  // bottom
     ctx.quadraticCurveTo(-hw + mL,  0,      -hw, -ht);  // left
     ctx.closePath();
+  }
+
+  /* ── SELECTION BAR shape: design-tool "selected text" look ──
+     A clean rectangle with vertical selection lines and circular handles,
+     mimicking text selection handles in graphic design tools.
+     Consumes exactly 0 rng() calls (fully deterministic).
+  ── */
+  function drawSelectionBar(ctx, textW, fontSize, chipColor, lineColor) {
+    const hw   = textW / 2 + fontSize * 0.20;        // rect half-width
+    const ht   = fontSize * 0.45;                    // rect half-height
+    const ext  = fontSize * 0.25;                    // line extension beyond rect edges
+    const dotR = Math.max(3, fontSize * 0.11);       // circle handle radius
+    const lw   = Math.max(1.5, fontSize * 0.030);    // line stroke width
+
+    // ── Solid rectangle background ──
+    ctx.globalAlpha = highlightBgOpacity;
+    ctx.fillStyle   = chipColor;
+    ctx.fillRect(-hw, -ht, hw * 2, ht * 2);
+    ctx.globalAlpha = 1;
+
+    // ── Selection lines + circle handles in lineColor ──
+    ctx.strokeStyle = lineColor;
+    ctx.fillStyle   = lineColor;
+    ctx.lineWidth   = lw;
+    ctx.lineCap     = 'round';
+
+    // Left vertical line: extends from ext above rect-top down to rect-bottom
+    ctx.beginPath();
+    ctx.moveTo(-hw, -ht - ext);
+    ctx.lineTo(-hw,  ht);
+    ctx.stroke();
+
+    // Right vertical line: extends from rect-top down to ext below rect-bottom
+    ctx.beginPath();
+    ctx.moveTo( hw, -ht);
+    ctx.lineTo( hw,  ht + ext);
+    ctx.stroke();
+
+    // Top-left circle handle
+    ctx.beginPath();
+    ctx.arc(-hw, -ht - ext, dotR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bottom-right circle handle
+    ctx.beginPath();
+    ctx.arc( hw,  ht + ext, dotR, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function drawOrganicBlob(ctx, textW, fontSize, padX, padY, wordLen) {
@@ -1481,14 +1536,16 @@ const bgSize    = document.getElementById('bgSize');
       if (line.length) lines.push(line);
     });
 
-    const chipH  = chipStyle === 'highlight'  ? Math.round(fontSize * 0.90)
-                 : chipStyle === 'postit'     ? Math.round(fontSize * 1.40)
-                 : chipStyle === 'newspaper'  ? Math.round(fontSize * 1.20)
-                 :                             Math.round(fontSize * 1.25);
-    const gapV   = chipStyle === 'highlight'  ? Math.round(chipH * 0.20)
-                 : chipStyle === 'postit'     ? Math.round(chipH * 0.38)
-                 : chipStyle === 'newspaper'  ? Math.round(chipH * 0.22)
-                 :                             Math.round(chipH * 0.30);
+    const chipH  = chipStyle === 'highlight'     ? Math.round(fontSize * 0.90)
+                 : chipStyle === 'postit'        ? Math.round(fontSize * 1.40)
+                 : chipStyle === 'newspaper'     ? Math.round(fontSize * 1.20)
+                 : chipStyle === 'selectionbar'  ? Math.round(fontSize * 1.40)
+                 :                                Math.round(fontSize * 1.25);
+    const gapV   = chipStyle === 'highlight'     ? Math.round(chipH * 0.20)
+                 : chipStyle === 'postit'        ? Math.round(chipH * 0.38)
+                 : chipStyle === 'newspaper'     ? Math.round(chipH * 0.22)
+                 : chipStyle === 'selectionbar'  ? Math.round(chipH * 0.28)
+                 :                                Math.round(chipH * 0.30);
     const blockH = lines.length * (chipH + gapV) - gapV;
     let   yBase  = (ph - blockH) / 2 + bgOffsetY / 100 * ph;
     yBase = Math.max(chipH * 0.5, yBase);
@@ -1506,10 +1563,11 @@ const bgSize    = document.getElementById('bgSize');
       const padYArr    = lineWords.map(() => fontSize * (0.08 + rng() * 0.07));
       const rArr       = padYArr.map(pY => fontSize / 2 + pY);
       const chipWidths = textWidths.map((tw, i) =>
-        chipStyle === 'highlight'  ? tw + fontSize * 0.20
-        : chipStyle === 'postit'   ? tw + fontSize * 0.68
-        : chipStyle === 'newspaper'? tw + fontSize * 0.60
-        :                            tw + 2 * padXArr[i] + 2 * rArr[i]
+        chipStyle === 'highlight'    ? tw + fontSize * 0.20
+        : chipStyle === 'postit'     ? tw + fontSize * 0.68
+        : chipStyle === 'newspaper'  ? tw + fontSize * 0.60
+        : chipStyle === 'selectionbar' ? tw + fontSize * 0.40
+        :                              tw + 2 * padXArr[i] + 2 * rArr[i]
       );
       const totalLineW = chipWidths.reduce((a,b) => a+b, 0) + chipGap*(lineWords.length-1);
       let curX = (pw - totalLineW) / 2 + bgOffsetX / 100 * pw;
@@ -1520,10 +1578,11 @@ const bgSize    = document.getElementById('bgSize');
         const cw   = chipWidths[wi];
         const tw   = textWidths[wi];
         const jitY = rowJitY + rngSigned() * chipH * 0.06;
-        const rot  = chipStyle === 'highlight'  ? rngSigned() * 0.032
-                   : chipStyle === 'postit'     ? rngSigned() * 0.130
-                   : chipStyle === 'newspaper'  ? rngSigned() * 0.088
-                   :                             rngSigned() * 0.105;
+        const rot  = chipStyle === 'highlight'    ? rngSigned() * 0.032
+                   : chipStyle === 'postit'       ? rngSigned() * 0.130
+                   : chipStyle === 'newspaper'    ? rngSigned() * 0.088
+                   : chipStyle === 'selectionbar' ? rngSigned() * 0.012
+                   :                               rngSigned() * 0.105;
         const cx = curX + cw / 2;
         const cy = rowY + chipH / 2 + jitY;
 
@@ -1539,10 +1598,11 @@ const bgSize    = document.getElementById('bgSize');
         const preDrawRng = _s;
 
         // Advance RNG past the draw function's internal calls
-        if      (chipStyle === 'highlight') { for (let _=0; _<42; _++) rng(); }
-        else if (chipStyle === 'postit')    { for (let _=0; _<5;  _++) rng(); }
-        else if (chipStyle === 'newspaper') { for (let _=0; _<4;  _++) rng(); }
-        else                                { for (let _=0; _<6;  _++) rng(); }
+        if      (chipStyle === 'highlight')    { for (let _=0; _<42; _++) rng(); }
+        else if (chipStyle === 'postit')       { for (let _=0; _<5;  _++) rng(); }
+        else if (chipStyle === 'newspaper')    { for (let _=0; _<4;  _++) rng(); }
+        else if (chipStyle === 'selectionbar') { /* 0 rng calls */ }
+        else                                   { for (let _=0; _<6;  _++) rng(); }
 
         allChips.push({ cx, cy, cw, tw, rot, padX: padXArr[wi], padY: padYArr[wi],
                         word, wChip, wText, wLuma, preDrawRng });
@@ -1577,6 +1637,9 @@ const bgSize    = document.getElementById('bgSize');
           // Thin inky border — darker on light chips, lighter on dark
           ctx.strokeStyle = chip.wLuma > 0.55 ? 'rgba(0,0,0,0.38)' : 'rgba(255,255,255,0.18)';
           ctx.lineWidth = 0.9; ctx.stroke();
+
+        } else if (chipStyle === 'selectionbar') {
+          drawSelectionBar(ctx, chip.tw, fontSize, chip.wChip, chip.wText);
 
         } else {
           ctx.shadowColor = 'rgba(0,0,0,0.13)'; ctx.shadowBlur = 5;
