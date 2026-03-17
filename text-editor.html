@@ -381,6 +381,15 @@
         oninput="setLineWidth(this.value)">
       <span id="lineWidthVal" style="font-size:11px;color:#999;min-width:28px">100%</span>
     </div>
+    <!-- Newspaper word/line toggle (shown only in Newspaper mode) -->
+    <div id="newspaperModeSection" style="display:none;align-items:center;gap:6px">
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Per</span>
+      <div class="mode-toggle" id="newspaperModeToggle">
+        <button id="btnNpWord" onclick="setNewspaperMode('word',this)">Word</button>
+        <button id="btnNpLine" class="active" onclick="setNewspaperMode('line',this)">Line</button>
+      </div>
+    </div>
     <!-- Post-it size (shown only in Post-it mode) -->
     <div id="postitScaleSection" style="display:none;align-items:center;gap:6px">
       <div class="ctrl-sep"></div>
@@ -837,8 +846,9 @@ const bgSize    = document.getElementById('bgSize');
     const colorModeToggle = document.getElementById('colorModeToggle');
     const paletteTabs     = document.getElementById('paletteTabs');
 
-    document.getElementById('postitScaleSection').style.display = s === 'postit' ? 'flex' : 'none';
-    document.getElementById('widthSection').style.display = s === 'postit' ? 'none' : 'flex';
+    document.getElementById('postitScaleSection').style.display  = s === 'postit'    ? 'flex' : 'none';
+    document.getElementById('newspaperModeSection').style.display = s === 'newspaper' ? 'flex' : 'none';
+    document.getElementById('widthSection').style.display         = s === 'postit'    ? 'none' : 'flex';
 
     // Save current color so we can restore it after palette rebuild
     _savedChipColor = chipColor;
@@ -890,11 +900,19 @@ const bgSize    = document.getElementById('bgSize');
 
   let paletteOffset = 0; // tracks current rotation of palette for multi-color
 
-  let lineWidthPct = 100; // % of canvas width used as wrap container
+  let lineWidthPct   = 100; // % of canvas width used as wrap container
+  let newspaperMode  = 'line'; // 'line' | 'word'  — newspaper strip grouping
 
   function setLineWidth(val) {
     lineWidthPct = parseInt(val);
     document.getElementById('lineWidthVal').textContent = val + '%';
+    renderBg();
+  }
+
+  function setNewspaperMode(m, btn) {
+    newspaperMode = m;
+    document.querySelectorAll('#newspaperModeToggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
     renderBg();
   }
 
@@ -1253,7 +1271,11 @@ const bgSize    = document.getElementById('bgSize');
     } else if (chipStyle === 'postit') {
       await renderPostitNote(rawText, fontSize);
     } else if (chipStyle === 'newspaper') {
-      await renderNewspaper(rawText, fontSize);
+      if (newspaperMode === 'line') {
+        await renderNewspaper(rawText, fontSize);
+      } else {
+        await renderChips(rawText, opacity, fontSize);
+      }
     } else {
       await renderChips(rawText, opacity, fontSize);
     }
