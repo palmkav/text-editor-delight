@@ -847,7 +847,8 @@ const bgSize    = document.getElementById('bgSize');
     const paletteTabs     = document.getElementById('paletteTabs');
 
     document.getElementById('postitScaleSection').style.display  = s === 'postit'    ? 'flex' : 'none';
-    document.getElementById('newspaperModeSection').style.display = s === 'newspaper' ? 'flex' : 'none';
+    document.getElementById('newspaperModeSection').style.display =
+      (s === 'rounded' || s === 'highlight' || s === 'newspaper') ? 'flex' : 'none';
     document.getElementById('widthSection').style.display         = s === 'postit'    ? 'none' : 'flex';
 
     // Save current color so we can restore it after palette rebuild
@@ -1694,21 +1695,40 @@ const bgSize    = document.getElementById('bgSize');
     const maxLineW   = (pw - 40) * (lineWidthPct / 100);
 
     const lines = [];
-    text.split(/\n/).forEach(segment => {
-      const segWords = segment.split(/\s+/).filter(Boolean);
-      if (segWords.length === 0) return;
-      let line = [], lineW = 0;
-      segWords.forEach(w => {
-        const ww   = mCtx.measureText(w).width + padXEst + capEst;
-        const addW = line.length === 0 ? ww : chipGapEst + ww;
-        if (line.length > 0 && lineW + addW > maxLineW) {
-          lines.push([...line]); line = []; lineW = 0;
-        }
-        line.push(w);
-        lineW += (line.length === 1 ? 0 : chipGapEst) + ww;
+    if (newspaperMode === 'line') {
+      // ── Line mode: whole sentence → one chip, wrapping at maxLineW ──
+      const spW = mCtx.measureText(' ').width;
+      text.split(/\n/).forEach(segment => {
+        const words = segment.trim().split(/\s+/).filter(Boolean);
+        if (!words.length) return;
+        let cur = [], curW = 0;
+        words.forEach(w => {
+          const ww = mCtx.measureText(w).width;
+          const gap = cur.length ? spW : 0;
+          if (cur.length && curW + gap + ww > maxLineW) {
+            lines.push([cur.join(' ')]); cur = [w]; curW = ww;
+          } else { cur.push(w); curW += gap + ww; }
+        });
+        if (cur.length) lines.push([cur.join(' ')]);
       });
-      if (line.length) lines.push(line);
-    });
+    } else {
+      // ── Word mode: each word is its own chip (original behaviour) ──
+      text.split(/\n/).forEach(segment => {
+        const segWords = segment.split(/\s+/).filter(Boolean);
+        if (segWords.length === 0) return;
+        let line = [], lineW = 0;
+        segWords.forEach(w => {
+          const ww   = mCtx.measureText(w).width + padXEst + capEst;
+          const addW = line.length === 0 ? ww : chipGapEst + ww;
+          if (line.length > 0 && lineW + addW > maxLineW) {
+            lines.push([...line]); line = []; lineW = 0;
+          }
+          line.push(w);
+          lineW += (line.length === 1 ? 0 : chipGapEst) + ww;
+        });
+        if (line.length) lines.push(line);
+      });
+    }
 
     const chipH  = chipStyle === 'highlight'     ? Math.round(fontSize * 0.90)
                  : chipStyle === 'postit'        ? Math.round(fontSize * 1.40)
