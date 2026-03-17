@@ -1252,10 +1252,10 @@ const bgSize    = document.getElementById('bgSize');
     ctx.closePath();
   }
 
-  /* ── Newspaper page background: warm cream + paper grain ──
-     Appended as the first (bottom-most) canvas in bgLayer so chip
-     strips sit on top of it.  Uses Math.random() — non-seeded — so
-     the texture feels naturally varied.
+  /* ── Newspaper page background: subtle grain over transparent canvas ──
+     No opaque fill — the page stays white (or shows a photo).
+     Only a very light scatter of fibrous marks adds a paper-like feel
+     without tinting or covering anything underneath.
   ── */
   function _renderNewspaperPageBg() {
     const page = document.getElementById('page');
@@ -1271,18 +1271,16 @@ const bgSize    = document.getElementById('bgSize');
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    // Warm off-white base — slightly warmer than pure white
-    ctx.fillStyle = '#F8F4ED';
-    ctx.fillRect(0, 0, pw, ph);
+    // No background fill — canvas is transparent so white page / photo shows through
 
-    // Dense fibrous grain covering the full page
-    for (let i = 0; i < 6000; i++) {
+    // Sparse fibrous grain — barely-there texture, just enough to feel like paper
+    for (let i = 0; i < 5000; i++) {
       const gx = Math.random() * pw;
       const gy = Math.random() * ph;
-      const gw = Math.random() * 1.4 + 0.2;
+      const gw = Math.random() * 1.2 + 0.2;
       const gh = gw * (Math.random() * 4 + 0.5);
-      ctx.globalAlpha = 0.012 + Math.random() * 0.022;
-      ctx.fillStyle   = Math.random() > 0.5 ? '#000' : '#fff';
+      ctx.globalAlpha = 0.008 + Math.random() * 0.016;
+      ctx.fillStyle   = '#4a3728';   // warm dark brown → feels like paper fibre
       ctx.fillRect(gx, gy, gw, gh);
     }
     ctx.globalAlpha = 1;
