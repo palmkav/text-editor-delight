@@ -1651,54 +1651,84 @@ const bgSize    = document.getElementById('bgSize');
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    lines.forEach((line, li) => {
-      const tw = mCtx.measureText(line).width;
+    // Gap width: wide enough to clear the strip padding (hw extends fontSize*0.42 each side)
+    const gapW = Math.max(mCtx.measureText(' ').width * 1.5, fontSize * 1.0);
 
-      // Per-strip jitter: ±13% page width horizontal + slight tilt
+    lines.forEach((line, li) => {
+      // ── Split line into segments using the same gap rule as renderChips ──
+      const words = line.split(' ');
+      const segs  = [];   // [{text, isGap}]
+      let   cur   = '';
+      words.forEach((word, wi) => {
+        if (wi > 0 && shouldHlGap(words[wi - 1], wi, li)) {
+          if (cur) segs.push({ text: cur, isGap: false });
+          segs.push({ text: '', isGap: true });
+          cur = word;
+        } else {
+          cur = cur ? cur + ' ' + word : word;
+        }
+      });
+      if (cur) segs.push({ text: cur, isGap: false });
+
+      // Measure each segment
+      const segTWs = segs.map(s => s.isGap ? 0 : mCtx.measureText(s.text).width);
+      const segCWs = segs.map((s, i) => s.isGap ? gapW : segTWs[i]);
+      const totalW = segCWs.reduce((a, b) => a + b, 0);
+
+      // Per-line jitter: ±13% page width + slight tilt (shared across all segments)
       const maxOff = Math.min(pw * 0.13, fontSize * 4.5);
       const jitX   = (rng() - 0.5) * 2 * maxOff;          // 1 rng
       const rot    = (rng() - 0.5) * 0.040;                // 1 rng
-      const cx     = pw / 2 + jitX + bgOffsetX / 100 * pw;
       const cy     = yBase + li * (stripH + gapV) + stripH / 2;
+      let   curX   = pw / 2 - totalW / 2 + jitX + bgOffsetX / 100 * pw;
 
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(rot);
+      segs.forEach((seg, si) => {
+        const cw = segCWs[si];
+        const tw = segTWs[si];
+        const cx = curX + cw / 2;
+        curX += cw;
 
-      // 1 — drop shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.20)';
-      ctx.shadowBlur  = 13; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
+        if (seg.isGap) return;   // transparent gap — nothing to draw
 
-      // 2 — torn strip path (8 rng calls)
-      drawNewspaper(ctx, tw, fontSize);
-      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
 
-      // 3 — base paper fill (full opacity — no transparency)
-      ctx.globalAlpha = 1; ctx.fillStyle = chipColor; ctx.fill();
+        // 1 — drop shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.20)';
+        ctx.shadowBlur  = 13; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
 
-      // 4 — paper grain (clip to strip; path still active after fill)
-      ctx.save();
-      ctx.clip();
-      const gW = tw + fontSize * 0.9, gH = fontSize * 1.3;
-      for (let i = 0; i < 300; i++) {
-        const gx = (Math.random() - 0.5) * gW;
-        const gy = (Math.random() - 0.5) * gH;
-        const gw = Math.random() * 1.6 + 0.2;
-        const gh = gw * (Math.random() * 3.2 + 0.5);
-        ctx.globalAlpha = 0.018 + Math.random() * 0.052;
-        ctx.fillStyle   = Math.random() > 0.42 ? '#000' : '#fff';
-        ctx.fillRect(gx, gy, gw, gh);
-      }
-      ctx.restore();
-      ctx.globalAlpha = 1;
+        // 2 — torn strip path (8 rng calls)
+        drawNewspaper(ctx, tw, fontSize);
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-      // 5 — text
-      ctx.globalAlpha  = 1; ctx.fillStyle = textColor;
-      ctx.font         = NP_FONT;
-      ctx.textAlign    = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(line, 0, 0);
+        // 3 — base paper fill (full opacity)
+        ctx.globalAlpha = 1; ctx.fillStyle = chipColor; ctx.fill();
 
-      ctx.restore();
+        // 4 — paper grain (clip to strip; path still active after fill)
+        ctx.save();
+        ctx.clip();
+        const gW = tw + fontSize * 0.9, gH = fontSize * 1.3;
+        for (let i = 0; i < 300; i++) {
+          const gx = (Math.random() - 0.5) * gW;
+          const gy = (Math.random() - 0.5) * gH;
+          const gw = Math.random() * 1.6 + 0.2;
+          const gh = gw * (Math.random() * 3.2 + 0.5);
+          ctx.globalAlpha = 0.018 + Math.random() * 0.052;
+          ctx.fillStyle   = Math.random() > 0.42 ? '#000' : '#fff';
+          ctx.fillRect(gx, gy, gw, gh);
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+
+        // 5 — text
+        ctx.fillStyle = textColor;
+        ctx.font      = NP_FONT;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(seg.text, 0, 0);
+
+        ctx.restore();
+      });
     });
   }
 
