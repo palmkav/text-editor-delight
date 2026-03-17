@@ -456,7 +456,13 @@
 <!-- STATUS BAR -->
 <div class="statusbar">
   <div>Words <b id="wordCount">0</b> &nbsp; Chars <b id="charCount">0</b></div>
-  <div>Text Editor</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <label class="show-toggle" title="Export with a transparent background instead of white">
+      <input type="checkbox" id="transparentBgToggle">
+      Transparent BG
+    </label>
+    <button class="btn btn-primary" onclick="exportPng()" style="padding:5px 16px;font-size:12px">⬇ Export PNG</button>
+  </div>
 </div>
 
 <script>
@@ -1817,6 +1823,72 @@ const bgSize    = document.getElementById('bgSize');
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = (document.querySelector('.doc-title').value || 'document') + '.txt';
     a.click();
+  }
+
+  /* ── Export PNG ── */
+  async function exportPng() {
+    const page      = document.getElementById('page');
+    const pw        = page.offsetWidth;
+    const ph        = page.offsetHeight;
+    const dpr       = Math.max(devicePixelRatio, 2);   // min 2× for crisp output
+    const transpBg  = document.getElementById('transparentBgToggle').checked;
+
+    const canvas  = document.createElement('canvas');
+    canvas.width  = pw * dpr;
+    canvas.height = ph * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Clip to page's rounded corners (matches .page border-radius: 16px)
+    const rad = 16;
+    ctx.beginPath();
+    ctx.moveTo(rad, 0);
+    ctx.lineTo(pw - rad, 0); ctx.quadraticCurveTo(pw, 0,  pw, rad);
+    ctx.lineTo(pw, ph - rad); ctx.quadraticCurveTo(pw, ph, pw - rad, ph);
+    ctx.lineTo(rad, ph);      ctx.quadraticCurveTo(0,  ph, 0,  ph - rad);
+    ctx.lineTo(0, rad);       ctx.quadraticCurveTo(0,  0,  rad, 0);
+    ctx.closePath();
+    ctx.clip();
+
+    // 1. Page background (white, or skip for transparent)
+    if (!transpBg) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pw, ph);
+    }
+
+    // 2. Photo background (replicate background-size: cover + center)
+    const photoBg  = document.getElementById('photoBg');
+    const bgImage  = photoBg.style.backgroundImage;
+    if (bgImage && bgImage !== 'none') {
+      const url = bgImage.replace(/^url\(["']?|["']?\)$/g, '');
+      await new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.max(pw / img.width, ph / img.height);
+          const sw = img.width * scale, sh = img.height * scale;
+          ctx.drawImage(img, (pw - sw) / 2, (ph - sh) / 2, sw, sh);
+          resolve();
+        };
+        img.onerror = resolve;
+        img.src = url;
+      });
+    }
+
+    // 3. Chip / highlight / post-it canvases (all depths, all modes)
+    const pageRect = page.getBoundingClientRect();
+    bgLayer.querySelectorAll('canvas').forEach(c => {
+      const r = c.getBoundingClientRect();
+      ctx.drawImage(c, r.left - pageRect.left, r.top - pageRect.top, r.width, r.height);
+    });
+
+    // 4. Trigger download
+    canvas.toBlob(blob => {
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = 'text-art.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
   }
 
   /* ── Word / char count ── */
