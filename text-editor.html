@@ -1053,7 +1053,6 @@ const bgSize    = document.getElementById('bgSize');
     _sg.forEach(g => g.classList.toggle('dark', _bgLum > 0.55));
 
     bgLayer.innerHTML = '';
-    if (!bgVisible.checked) return;
     const rawText  = bgInput.value.trim();
     if (!rawText) return;
     const opacity  = 0.92;
@@ -1147,25 +1146,29 @@ const bgSize    = document.getElementById('bgSize');
     ctx.translate(pad + hw, pad + ht);
     ctx.rotate(rot);
 
-    ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 22;
-    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 8;
-    ctx.globalAlpha = 0.97; ctx.fillStyle = chipColor;
-    ctx.fillRect(-hw, -ht, noteS, noteS);
-    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    if (bgVisible.checked) {
+      ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 22;
+      ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 8;
+      ctx.globalAlpha = 0.97; ctx.fillStyle = chipColor;
+      ctx.fillRect(-hw, -ht, noteS, noteS);
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-    ctx.globalAlpha = 0.30; ctx.strokeStyle = textColor;
-    ctx.lineWidth = Math.max(0.8, noteS * 0.006);
-    ctx.strokeRect(-hw + border, -ht + border, noteS - border*2, noteS - border*2);
+      ctx.globalAlpha = 0.30; ctx.strokeStyle = textColor;
+      ctx.lineWidth = Math.max(0.8, noteS * 0.006);
+      ctx.strokeRect(-hw + border, -ht + border, noteS - border*2, noteS - border*2);
+    }
 
     const sepY = -ht + headerH;
-    ctx.beginPath(); ctx.moveTo(-hw + padX, sepY); ctx.lineTo(hw - padX, sepY);
-    ctx.strokeStyle = textColor; ctx.lineWidth = Math.max(0.6, noteS * 0.004);
-    ctx.globalAlpha = 0.30; ctx.stroke();
+    if (bgVisible.checked) {
+      ctx.beginPath(); ctx.moveTo(-hw + padX, sepY); ctx.lineTo(hw - padX, sepY);
+      ctx.strokeStyle = textColor; ctx.lineWidth = Math.max(0.6, noteS * 0.004);
+      ctx.globalAlpha = 0.30; ctx.stroke();
 
-    ctx.globalAlpha = 0.55; ctx.fillStyle = textColor;
-    ctx.font = `700 ${Math.max(9, labelSize * 1.8)}px -apple-system,BlinkMacSystemFont,sans-serif`;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('NOTE', -hw + padX, -ht + headerH * 0.52);
+      ctx.globalAlpha = 0.55; ctx.fillStyle = textColor;
+      ctx.font = `700 ${Math.max(9, labelSize * 1.8)}px -apple-system,BlinkMacSystemFont,sans-serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('NOTE', -hw + padX, -ht + headerH * 0.52);
+    }
 
     const midContent = (sepY + padVert + ht - padVert) / 2;
     const textStartY = midContent - (wLines.length * lineH) / 2 + lineH / 2;
@@ -1388,26 +1391,28 @@ const bgSize    = document.getElementById('bgSize');
       _s = chip.preDrawRng;
       ctx.rotate(chip.rot);
 
-      if (chipStyle === 'highlight') {
-        ctx.shadowColor = 'rgba(0,0,0,0.06)'; ctx.shadowBlur = 4;
-        ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1;
-        drawHighlight(ctx, chip.tw, fontSize, chip.wChip);
-        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+      if (bgVisible.checked) {
+        if (chipStyle === 'highlight') {
+          ctx.shadowColor = 'rgba(0,0,0,0.06)'; ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1;
+          drawHighlight(ctx, chip.tw, fontSize, chip.wChip);
+          ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-      } else if (chipStyle === 'postit') {
-        ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 9;
-        ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
-        drawPostit(ctx, chip.tw, fontSize, chip.wChip);
-        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+        } else if (chipStyle === 'postit') {
+          ctx.shadowColor = 'rgba(0,0,0,0.20)'; ctx.shadowBlur = 9;
+          ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
+          drawPostit(ctx, chip.tw, fontSize, chip.wChip);
+          ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-      } else {
-        ctx.shadowColor = 'rgba(0,0,0,0.13)'; ctx.shadowBlur = 5;
-        ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
-        drawOrganicBlob(ctx, chip.tw, fontSize, chip.padX, chip.padY, chip.word.length);
-        ctx.globalAlpha = opacity; ctx.fillStyle = chip.wChip; ctx.fill();
-        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-        if (chip.wLuma > 0.55) {
-          ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 1; ctx.stroke();
+        } else {
+          ctx.shadowColor = 'rgba(0,0,0,0.13)'; ctx.shadowBlur = 5;
+          ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
+          drawOrganicBlob(ctx, chip.tw, fontSize, chip.padX, chip.padY, chip.word.length);
+          ctx.globalAlpha = opacity; ctx.fillStyle = chip.wChip; ctx.fill();
+          ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+          if (chip.wLuma > 0.55) {
+            ctx.strokeStyle = 'rgba(0,0,0,0.10)'; ctx.lineWidth = 1; ctx.stroke();
+          }
         }
       }
 
