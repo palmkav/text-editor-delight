@@ -1702,6 +1702,23 @@ const bgSize    = document.getElementById('bgSize');
     });
   }
 
+  /* ── Highlight gap helper ──
+     Decides (deterministically, no rng() calls) whether to place a
+     transparent gap BEFORE word at position `wordIdx` in line `lineIdx`.
+     Probabilities vary by context so gaps cluster naturally at
+     punctuation and conjunctions, with occasional random breaks elsewhere.
+  ── */
+  function shouldHlGap(prevWord, wordIdx, lineIdx) {
+    const CONJ = new Set(['and','or','but','so','yet','nor','for','then','when','while','because','although']);
+    // Stable hash mixes content + position + current shuffle seed
+    const h = Math.abs((prevWord.length * 13 + wordIdx * 37 + lineIdx * 79 + masterSeed) | 0) % 100;
+    const bare = prevWord.toLowerCase().replace(/[^a-z]/g, '');
+    if (/[\.!?;]$/.test(prevWord)) return h < 78;   // after sentence end  ~78%
+    if (/,$/.test(prevWord))        return h < 62;   // after comma         ~62%
+    if (CONJ.has(bare))             return h < 48;   // at conjunction      ~48%
+    return h < 14;                                   // random elsewhere    ~14%
+  }
+
   async function renderChips(text, opacity, fontSize) {
     try { await document.fonts.load(`700 ${fontSize}px Caveat`); } catch(e) {}
 
@@ -1759,6 +1776,30 @@ const bgSize    = document.getElementById('bgSize');
       });
     }
 
+    // ── Highlight line mode: randomly split lines into segments + transparent gaps ──
+    // '\x00' (null char) is used as a gap-marker word — takes space, draws nothing.
+    if (chipStyle === 'highlight' && newspaperMode === 'line') {
+      const spaceW = mCtx.measureText(' ').width;
+      for (let li = 0; li < lines.length; li++) {
+        const fullText = lines[li][0];
+        const words = fullText.split(' ');
+        if (words.length <= 1) continue;
+        const segmented = [];
+        let cur = '';
+        words.forEach((word, wi) => {
+          if (wi > 0 && shouldHlGap(words[wi - 1], wi, li)) {
+            if (cur) segmented.push(cur);
+            segmented.push('\x00');          // transparent gap
+            cur = word;
+          } else {
+            cur = cur ? cur + ' ' + word : word;
+          }
+        });
+        if (cur) segmented.push(cur);
+        if (segmented.length > 1) lines[li] = segmented;
+      }
+    }
+
     const chipH  = chipStyle === 'highlight'     ? Math.round(fontSize * 0.90)
                  : chipStyle === 'postit'        ? Math.round(fontSize * 1.40)
                  : chipStyle === 'newspaper'     ? Math.round(fontSize * 1.20)
@@ -1785,8 +1826,10 @@ const bgSize    = document.getElementById('bgSize');
       const padXArr    = lineWords.map(() => 0);
       const padYArr    = lineWords.map(() => fontSize * (0.08 + rng() * 0.07));
       const rArr       = padYArr.map(pY => fontSize / 2 + pY);
+      const spW        = mCtx.measureText(' ').width;
       const chipWidths = textWidths.map((tw, i) =>
-        chipStyle === 'highlight'    ? tw + fontSize * 0.20
+        lineWords[i] === '\x00'      ? spW * 1.4              // transparent gap spacer
+        : chipStyle === 'highlight'    ? tw + fontSize * 0.20
         : chipStyle === 'postit'     ? tw + fontSize * 0.68
         : chipStyle === 'newspaper'  ? tw + fontSize * 0.86
         : chipStyle === 'selectionbar' ? tw + fontSize * 0.40
@@ -1828,13 +1871,15 @@ const bgSize    = document.getElementById('bgSize');
         else                                   { for (let _=0; _<6;  _++) rng(); }
 
         allChips.push({ cx, cy, cw, tw, rot, padX: padXArr[wi], padY: padYArr[wi],
-                        word, wChip, wText, wLuma, preDrawRng });
+                        word, wChip, wText, wLuma, preDrawRng,
+                        isGap: word === '\x00' });
         curX += cw + chipGap;
       });
     });
 
     // ── Shared inner draw helper (ctx already translated to chip center) ──
     function _drawChip(ctx, chip) {
+      if (chip.isGap) return;          // transparent gap — occupies space, draws nothing
       _s = chip.preDrawRng;
       ctx.rotate(chip.rot);
 
