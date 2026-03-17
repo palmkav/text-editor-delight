@@ -1712,7 +1712,7 @@ const bgSize    = document.getElementById('bgSize');
     // ── Measuring context (used for text width only) ──
     const measureCanvas = document.createElement('canvas');
     const mCtx = measureCanvas.getContext('2d');
-    mCtx.font = chipStyle === 'newspaper'
+    mCtx.font = (chipStyle === 'newspaper' || chipStyle === 'highlight')
       ? `400 ${fontSize}px "Times New Roman", Georgia, serif`
       : `700 ${fontSize}px Caveat`;
 
@@ -1891,7 +1891,7 @@ const bgSize    = document.getElementById('bgSize');
       }
 
       ctx.globalAlpha = 1; ctx.fillStyle = chip.wText;
-      ctx.font = chipStyle === 'newspaper'
+      ctx.font = (chipStyle === 'newspaper' || chipStyle === 'highlight')
         ? `400 ${fontSize}px "Times New Roman", Georgia, serif`
         : `700 ${fontSize}px Caveat`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
