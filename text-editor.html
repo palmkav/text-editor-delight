@@ -1252,6 +1252,42 @@ const bgSize    = document.getElementById('bgSize');
     ctx.closePath();
   }
 
+  /* ── Newspaper page background: warm cream + paper grain ──
+     Appended as the first (bottom-most) canvas in bgLayer so chip
+     strips sit on top of it.  Uses Math.random() — non-seeded — so
+     the texture feels naturally varied.
+  ── */
+  function _renderNewspaperPageBg() {
+    const page = document.getElementById('page');
+    const pw   = page.offsetWidth  || 720;
+    const ph   = page.offsetHeight || 720;
+    const dpr  = devicePixelRatio;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = pw * dpr;
+    canvas.height = ph * dpr;
+    canvas.style.cssText = `width:${pw}px;height:${ph}px;display:block;`;
+    bgLayer.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Warm off-white base — slightly warmer than pure white
+    ctx.fillStyle = '#F8F4ED';
+    ctx.fillRect(0, 0, pw, ph);
+
+    // Dense fibrous grain covering the full page
+    for (let i = 0; i < 6000; i++) {
+      const gx = Math.random() * pw;
+      const gy = Math.random() * ph;
+      const gw = Math.random() * 1.4 + 0.2;
+      const gh = gw * (Math.random() * 4 + 0.5);
+      ctx.globalAlpha = 0.012 + Math.random() * 0.022;
+      ctx.fillStyle   = Math.random() > 0.5 ? '#000' : '#fff';
+      ctx.fillRect(gx, gy, gw, gh);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /* ════════════════════════════════
      MAIN RENDER
   ════════════════════════════════ */
@@ -1272,6 +1308,7 @@ const bgSize    = document.getElementById('bgSize');
     } else if (chipStyle === 'postit') {
       await renderPostitNote(rawText, fontSize);
     } else if (chipStyle === 'newspaper') {
+      _renderNewspaperPageBg();
       if (newspaperMode === 'line') {
         await renderNewspaper(rawText, fontSize);
       } else {
@@ -1638,8 +1675,8 @@ const bgSize    = document.getElementById('bgSize');
       drawNewspaper(ctx, tw, fontSize);
       ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-      // 3 — base paper fill
-      ctx.globalAlpha = 0.96; ctx.fillStyle = chipColor; ctx.fill();
+      // 3 — base paper fill (full opacity — no transparency)
+      ctx.globalAlpha = 1; ctx.fillStyle = chipColor; ctx.fill();
 
       // 4 — paper grain (clip to strip; path still active after fill)
       ctx.save();
@@ -1655,15 +1692,9 @@ const bgSize    = document.getElementById('bgSize');
         ctx.fillRect(gx, gy, gw, gh);
       }
       ctx.restore();
-
-      // 5 — edge stroke
       ctx.globalAlpha = 1;
-      const [pr, pg, pb] = hexToRgb(chipColor);
-      const luma = (0.299*pr + 0.587*pg + 0.114*pb) / 255;
-      ctx.strokeStyle = luma > 0.55 ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.14)';
-      ctx.lineWidth   = 0.8; ctx.stroke();
 
-      // 6 — text
+      // 5 — text
       ctx.globalAlpha  = 1; ctx.fillStyle = textColor;
       ctx.font         = NP_FONT;
       ctx.textAlign    = 'center'; ctx.textBaseline = 'middle';
@@ -1689,7 +1720,7 @@ const bgSize    = document.getElementById('bgSize');
 
     /* Words flow left-to-right, wrap to next row only when line is full.
        Manual newlines in the input always force a new chip row. */
-    const chipGapEst = Math.round(fontSize * 0.20);
+    const chipGapEst = chipStyle === 'newspaper' ? Math.round(fontSize * 0.50) : Math.round(fontSize * 0.20);
     const capEst     = fontSize * 0.615 * 2;
     const padXEst    = 0;
     const maxLineW   = (pw - 40) * (lineWidthPct / 100);
@@ -1751,7 +1782,7 @@ const bgSize    = document.getElementById('bgSize');
     // ── Phase 1: Collect all chip geometry + save RNG state before each draw ──
     const allChips = [];
     lines.forEach((lineWords, li) => {
-      const chipGap    = Math.round(fontSize * 0.20);
+      const chipGap    = chipStyle === 'newspaper' ? Math.round(fontSize * 0.50) : Math.round(fontSize * 0.20);
       const textWidths = lineWords.map(w => mCtx.measureText(w).width);
       const padXArr    = lineWords.map(() => 0);
       const padYArr    = lineWords.map(() => fontSize * (0.08 + rng() * 0.07));
@@ -1759,7 +1790,7 @@ const bgSize    = document.getElementById('bgSize');
       const chipWidths = textWidths.map((tw, i) =>
         chipStyle === 'highlight'    ? tw + fontSize * 0.20
         : chipStyle === 'postit'     ? tw + fontSize * 0.68
-        : chipStyle === 'newspaper'  ? tw + fontSize * 0.60
+        : chipStyle === 'newspaper'  ? tw + fontSize * 0.86
         : chipStyle === 'selectionbar' ? tw + fontSize * 0.40
         :                              tw + 2 * padXArr[i] + 2 * rArr[i]
       );
@@ -1827,10 +1858,9 @@ const bgSize    = document.getElementById('bgSize');
           ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 5;
           drawNewspaper(ctx, chip.tw, fontSize);
           ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-          // Base paper fill
-          ctx.globalAlpha = 0.97; ctx.fillStyle = chip.wChip; ctx.fill();
+          // Paper fill (full opacity — no transparency)
+          ctx.globalAlpha = 1; ctx.fillStyle = chip.wChip; ctx.fill();
           // Paper grain — tiny fibre-like marks clipped to the strip shape
-          // (path is still active after fill(), so we can clip to it)
           ctx.save();
           ctx.clip();
           const grainW = chip.tw + fontSize * 0.9;
@@ -1839,16 +1869,13 @@ const bgSize    = document.getElementById('bgSize');
             const gx = (Math.random() - 0.5) * grainW;
             const gy = (Math.random() - 0.5) * grainH;
             const gw = Math.random() * 1.5 + 0.2;
-            const gh = gw * (Math.random() * 3 + 0.6);  // elongated fibres
+            const gh = gw * (Math.random() * 3 + 0.6);
             ctx.globalAlpha = 0.022 + Math.random() * 0.048;
             ctx.fillStyle   = Math.random() > 0.42 ? '#000' : '#fff';
             ctx.fillRect(gx, gy, gw, gh);
           }
           ctx.restore();
-          // Thin inky edge — darker on light chips, lighter on dark
           ctx.globalAlpha = 1;
-          ctx.strokeStyle = chip.wLuma > 0.55 ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.15)';
-          ctx.lineWidth = 0.8; ctx.stroke();
 
         } else if (chipStyle === 'selectionbar') {
           drawSelectionBar(ctx, chip.tw, fontSize, chip.wChip, chip.wText);
