@@ -309,6 +309,10 @@
       -webkit-appearance: none; appearance: none;
     }
     .anim-select:focus { border-color: #264F56; }
+    .anim-intensity-slider {
+      width: 60px; accent-color: #264F56; cursor: pointer;
+      vertical-align: middle;
+    }
 
     /* ── STATUS BAR ── */
     .statusbar {
@@ -396,6 +400,9 @@
       <option value="sparkle">✦ Sparkle</option>
       <option value="typing">▌ Typing</option>
     </select>
+    <input type="range" id="animIntensitySlider" class="anim-intensity-slider"
+      min="1" max="100" value="50" style="display:none"
+      oninput="setAnimIntensity(+this.value)" title="Animation intensity">
     <div class="ctrl-sep"></div>
     <label class="show-toggle">
       <input type="checkbox" id="bgVisibleToggle" checked
@@ -468,11 +475,53 @@ const bgSize    = document.getElementById('bgSize');
   let highlightBgOpacity  = 0.75;   // bg-only opacity for highlight mode
   let bgOffsetY           = 0;      // vertical offset % of canvas height
   let bgOffsetX           = 0;      // horizontal offset % of canvas width
-  let animMode = 'off';  // 'off' | 'bounce' | 'sparkle' | 'typing'
+  let animMode      = 'off';  // 'off' | 'bounce' | 'sparkle' | 'typing'
+  let animIntensity = 50;     // 1–100
 
   function setAnimation(val) {
     animMode = val;
+    document.getElementById('animIntensitySlider').style.display = val === 'off' ? 'none' : 'inline-block';
     renderBg();
+  }
+
+  function setAnimIntensity(val) {
+    animIntensity = val;
+    renderBg();
+  }
+
+  // Inject / update @keyframes that are scaled by animIntensity.
+  // Called before rendering any animated chips so the browser picks up the
+  // new keyframe definitions before the animation starts.
+  function _applyIntensityKeyframes() {
+    const t    = animIntensity / 100;            // 0 → 1
+    // Bounce: translate / scale overshoot
+    const bTx1 = (10  * t).toFixed(1);           // 0 → 10 px  (default @50 → 5 px)
+    const bTx2 = (-4  * t).toFixed(1);           // 0 → -4 px  (default @50 → -2 px)
+    const bS1  = (1   + 0.15 * t).toFixed(3);   // 1.0 → 1.15 (default @50 → 1.075)
+    const bS2  = (1   - 0.06 * t).toFixed(3);   // 1.0 → 0.94 (default @50 → 0.97)
+    // Sparkle: pop scale overshoot
+    const sSc  = (1.04 + 0.24 * t).toFixed(3);  // 1.04 → 1.28 (default @50 → 1.16)
+
+    let el = document.getElementById('anim-intensity-style');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'anim-intensity-style';
+      document.head.appendChild(el);
+    }
+    el.textContent = `
+      @keyframes chipBounceIn {
+        0%   { opacity:0; transform:translateX(-22px) scale(0.7); }
+        55%  { opacity:1; transform:translateX(${bTx1}px) scale(${bS1}); }
+        75%  { transform:translateX(${bTx2}px) scale(${bS2}); }
+        100% { opacity:1; transform:translateX(0) scale(1); }
+      }
+      @keyframes chipSparkleIn {
+        0%   { opacity:0; transform:scale(0.12) rotate(-14deg); }
+        52%  { opacity:1; transform:scale(${sSc}) rotate(5deg); }
+        74%  { transform:scale(0.92) rotate(-2deg); }
+        100% { opacity:1; transform:scale(1) rotate(0deg); }
+      }
+    `;
   }
 
   function setHighlightOpacity(val) {
@@ -1586,6 +1635,9 @@ const bgSize    = document.getElementById('bgSize');
 
     // ── Phase 2b: Bounce — slide in from left, word by word ──
     } else if (animMode === 'bounce') {
+      _applyIntensityKeyframes();
+      const t       = animIntensity / 100;
+      const cbY2    = (1.0 + 1.2 * t).toFixed(3);  // overshoot: 1.0 (subtle) → 2.2 (heavy)
       const animPad = Math.ceil(fontSize * 0.9);
       allChips.forEach((chip, idx) => {
         const { mc, miniW, miniH } = _makeMiniCanvas(chip, animPad);
@@ -1596,7 +1648,7 @@ const bgSize    = document.getElementById('bgSize');
           `top:${chip.cy - miniH / 2}px`,
           `width:${miniW}px`, `height:${miniH}px`,
           'pointer-events:none',
-          'animation:chipBounceIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both',
+          `animation:chipBounceIn 0.45s cubic-bezier(0.34,${cbY2},0.64,1) both`,
           `animation-delay:${idx * 65}ms`,
         ].join(';');
         wrapper.appendChild(mc);
@@ -1605,8 +1657,13 @@ const bgSize    = document.getElementById('bgSize');
 
     // ── Phase 2c: Sparkle — pop + scatter star particles ──
     } else if (animMode === 'sparkle') {
+      _applyIntensityKeyframes();
+      const t         = animIntensity / 100;
+      const cbY2      = (1.0 + 1.2 * t).toFixed(3);
+      // particle scatter: 0.4× (subtle) → 1.0× (default@50) → 2.0× (heavy)
+      const sparkMult = 0.4 + 1.2 * t;
       const animPad   = Math.ceil(fontSize * 0.9);
-      const sparkDist = Math.max(fontSize * 1.1, chipH * 0.85);
+      const sparkDist = Math.max(fontSize * 1.1, chipH * 0.85) * sparkMult;
       // 8 evenly-spaced directions for particles
       const ANGLES    = [0, 45, 90, 135, 180, 225, 270, 315];
 
@@ -1619,7 +1676,7 @@ const bgSize    = document.getElementById('bgSize');
           `top:${chip.cy - miniH / 2}px`,
           `width:${miniW}px`, `height:${miniH}px`,
           'pointer-events:none', 'overflow:visible',
-          'animation:chipSparkleIn 0.48s cubic-bezier(0.34,1.56,0.64,1) both',
+          `animation:chipSparkleIn 0.48s cubic-bezier(0.34,${cbY2},0.64,1) both`,
           `animation-delay:${idx * 60}ms`,
         ].join(';');
         wrapper.appendChild(mc);
@@ -1653,8 +1710,10 @@ const bgSize    = document.getElementById('bgSize');
     // ── Phase 2d: Typing — chips reveal left-to-right, one word at a time ──
     } else if (animMode === 'typing') {
       const animPad  = Math.ceil(fontSize * 0.9);
-      const CHAR_MS  = 60;    // ms per character
-      const MIN_MS   = 160;   // minimum duration even for short words
+      // intensity 1→100: subtle (fast reveal) → heavy (slow, dramatic reveal)
+      const t        = animIntensity / 100;
+      const CHAR_MS  = Math.round(20 + 80  * t);  // 20 ms → 100 ms per char  (default@50 → 60)
+      const MIN_MS   = Math.round(80 + 160 * t);  // 80 ms → 240 ms min       (default@50 → 160)
       let   typeDelay = 0;
 
       allChips.forEach((chip) => {
