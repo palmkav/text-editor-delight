@@ -2515,8 +2515,20 @@ const bgSize    = document.getElementById('bgSize');
           fastStart: 'in-memory',
         });
         encoder = new VideoEncoder({
-          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta ?? {}),
-          error:  e => { encErr = e; },
+          output: (chunk, meta) => {
+            try {
+              // Chrome passes decoderConfig.colorSpace = null on the first
+              // keyframe chunk, which crashes mp4-muxer when it reads its
+              // properties. Strip any null colorSpace before muxing.
+              let m = meta ?? {};
+              if (m.decoderConfig) {
+                m = { ...m, decoderConfig: { ...m.decoderConfig } };
+                if (m.decoderConfig.colorSpace == null) delete m.decoderConfig.colorSpace;
+              }
+              muxer.addVideoChunk(chunk, m);
+            } catch(e) { encErr = e; }
+          },
+          error: e => { encErr = e; },
         });
         encoder.configure({
           codec:     chosenCodec,
