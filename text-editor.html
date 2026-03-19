@@ -514,6 +514,7 @@ const bgSize    = document.getElementById('bgSize');
   let bgOffsetX           = 0;      // horizontal offset % of canvas width
   let animMode      = 'off';  // 'off' | 'bounce' | 'sparkle' | 'typing'
   let animIntensity = 50;     // 1–100
+  let _chipRenderScale = 0;   // 0 = use devicePixelRatio; >0 = override (e.g. for 4K video)
 
   function setAnimation(val) {
     animMode = val;
@@ -1996,7 +1997,7 @@ const bgSize    = document.getElementById('bgSize');
 
     // ── Helper: build a positioned mini canvas for one chip ──
     function _makeMiniCanvas(chip, animPad) {
-      const dpr   = devicePixelRatio;
+      const dpr   = _chipRenderScale || devicePixelRatio;
       const miniW = Math.ceil(chip.cw) + animPad * 2;
       const miniH = chipH + animPad * 2;
       const mc    = document.createElement('canvas');
@@ -2406,13 +2407,17 @@ const bgSize    = document.getElementById('bgSize');
     const pw   = page.offsetWidth;
     const ph   = page.offsetHeight;
     const FPS  = 30;
+    // Scale to 4K (target 3840px on longest side)
+    const TARGET_PX  = 3840;
+    const scale4k    = Math.max(Math.ceil(TARGET_PX / Math.max(pw, ph)), 2);
     // H.264 requires even dimensions
-    const encW = pw % 2 === 0 ? pw : pw + 1;
-    const encH = ph % 2 === 0 ? ph : ph + 1;
+    const encW = (pw * scale4k) % 2 === 0 ? pw * scale4k : pw * scale4k + 1;
+    const encH = (ph * scale4k) % 2 === 0 ? ph * scale4k : ph * scale4k + 1;
 
     const saveBtn   = document.getElementById('saveBtn');
     const origLabel = saveBtn.textContent;
     const _restore  = (err) => {
+      _chipRenderScale    = 0;   // reset so normal previews use devicePixelRatio
       saveBtn.textContent = origLabel;
       saveBtn.disabled    = false;
       if (err) { console.error('[saveAsVideo]', err); alert('Video export failed: ' + (err?.message || String(err))); }
@@ -2454,6 +2459,7 @@ const bgSize    = document.getElementById('bgSize');
     // PHASE 2: Restart animations NOW (all async loading done)
     // ══════════════════════════════════════════════════════════
     saveBtn.textContent = '⏺ Recording…';
+    _chipRenderScale = scale4k;   // chips now render at 4K resolution in _makeMiniCanvas
     await renderBg();
 
     // ── Compute total animation duration from freshly created DOM elements ──
@@ -2473,18 +2479,23 @@ const bgSize    = document.getElementById('bgSize');
     });
     const totalDurationMs = maxEndMs + 800; // hold 800 ms on final frame
 
-    // ── Recording canvas ──
+    // ── Recording canvas (4K) ──
     const rec  = document.createElement('canvas');
     rec.width  = encW; rec.height = encH;
     const rCtx = rec.getContext('2d');
+    // Scale coordinate system to CSS pixels so _compositeChips (which uses
+    // getBoundingClientRect values) maps 1:1 to our 4K canvas pixels.
+    rCtx.scale(scale4k, scale4k);
+    const recCssW = encW / scale4k;   // CSS-pixel width  (≈ pw)
+    const recCssH = encH / scale4k;   // CSS-pixel height (≈ ph)
 
     function drawRecFrame() {
       rCtx.fillStyle = '#fff';
-      rCtx.fillRect(0, 0, encW, encH);
+      rCtx.fillRect(0, 0, recCssW, recCssH);
       if (photoBgImg) {
-        const s  = Math.max(encW / photoBgImg.naturalWidth, encH / photoBgImg.naturalHeight);
+        const s  = Math.max(recCssW / photoBgImg.naturalWidth, recCssH / photoBgImg.naturalHeight);
         const sw = photoBgImg.naturalWidth * s, sh = photoBgImg.naturalHeight * s;
-        rCtx.drawImage(photoBgImg, (encW - sw) / 2, (encH - sh) / 2, sw, sh);
+        rCtx.drawImage(photoBgImg, (recCssW - sw) / 2, (recCssH - sh) / 2, sw, sh);
       }
       _compositeChips(rCtx, page);
     }
