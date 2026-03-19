@@ -2510,9 +2510,10 @@ const bgSize    = document.getElementById('bgSize');
         if (!chosenCodec) throw new Error('H.264 encoding is not supported in this browser. Try Chrome or Edge.');
         muxerTarget = new ArrayBufferTarget();
         muxer = new Muxer({
-          target:    muxerTarget,
-          video:     { codec: 'avc', width: encW, height: encH },
-          fastStart: 'in-memory',
+          target:                muxerTarget,
+          video:                 { codec: 'avc', width: encW, height: encH },
+          fastStart:             'in-memory',
+          firstTimestampBehavior: 'offset',   // timestamps start from performance.now(), not 0
         });
         encoder = new VideoEncoder({
           output: (chunk, meta) => {
