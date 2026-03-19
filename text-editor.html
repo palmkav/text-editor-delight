@@ -2415,7 +2415,7 @@ const bgSize    = document.getElementById('bgSize');
     const _restore  = (err) => {
       saveBtn.textContent = origLabel;
       saveBtn.disabled    = false;
-      if (err) { console.error('[saveAsVideo]', err); alert('Video export failed. Check console for details.'); }
+      if (err) { console.error('[saveAsVideo]', err); alert('Video export failed: ' + (err?.message || String(err))); }
     };
 
     saveBtn.textContent = '⏺ Loading…';
@@ -2493,8 +2493,21 @@ const bgSize    = document.getElementById('bgSize');
     // PHASE 3: Record — PATH A: WebCodecs + mp4-muxer → .mp4
     // ══════════════════════════════════════════════════════════
     if (Muxer) {
+      // Find a supported H.264 codec string
+      const codecCandidates = ['avc1.640028', 'avc1.4D001F', 'avc1.42001F', 'avc1.420034'];
+      let chosenCodec = null;
+      for (const codec of codecCandidates) {
+        try {
+          const support = await VideoEncoder.isConfigSupported({
+            codec, width: encW, height: encH, bitrate: 3_500_000, framerate: FPS,
+          });
+          if (support.supported) { chosenCodec = codec; break; }
+        } catch(_) {}
+      }
+
       let muxerTarget, muxer, encoder, encErr = null;
       try {
+        if (!chosenCodec) throw new Error('H.264 encoding is not supported in this browser. Try Chrome or Edge.');
         muxerTarget = new ArrayBufferTarget();
         muxer = new Muxer({
           target:    muxerTarget,
@@ -2506,12 +2519,14 @@ const bgSize    = document.getElementById('bgSize');
           error:  e => { encErr = e; },
         });
         encoder.configure({
-          codec:     'avc1.42001F',   // H.264 Baseline Profile Level 3.1
+          codec:     chosenCodec,
           width:     encW,
           height:    encH,
           bitrate:   3_500_000,
           framerate: FPS,
         });
+        // Wait one tick for async configure errors to surface
+        await new Promise(r => setTimeout(r, 50));
       } catch(e) {
         encErr = e;
       }
