@@ -1770,7 +1770,7 @@ const bgSize    = document.getElementById('bgSize');
     return h < 5;                                    // random elsewhere     ~5%
   }
 
-  async function renderChips(text, opacity, fontSize) {
+  async function renderChips(text, opacity, fontSize, exportCtx = null) {
     try { await document.fonts.load(`700 ${fontSize}px Caveat`); } catch(e) {}
 
     const page = document.getElementById('page');
@@ -2012,21 +2012,29 @@ const bgSize    = document.getElementById('bgSize');
       return { mc, miniW, miniH };
     }
 
-    // ── Phase 2a: Static — one shared canvas ──
-    if (animMode === 'off') {
-      const canvas = document.createElement('canvas');
-      canvas.width  = pw * devicePixelRatio;
-      canvas.height = ph * devicePixelRatio;
-      canvas.style.width  = pw + 'px';
-      canvas.style.height = ph + 'px';
-      bgLayer.appendChild(canvas);
-      const ctx = canvas.getContext('2d');
-      ctx.scale(devicePixelRatio, devicePixelRatio);
+    // ── Phase 2a: Static — one shared canvas (or direct to exportCtx for hi-res export) ──
+    if (animMode === 'off' || exportCtx) {
+      let renderCtx;
+      if (exportCtx) {
+        // High-res export: draw directly onto the pre-scaled export canvas.
+        // All shape + text drawing uses logical coordinates, so it renders
+        // at whatever DPI exportCtx has been scaled to (e.g. 4K).
+        renderCtx = exportCtx;
+      } else {
+        const canvas = document.createElement('canvas');
+        canvas.width  = pw * devicePixelRatio;
+        canvas.height = ph * devicePixelRatio;
+        canvas.style.width  = pw + 'px';
+        canvas.style.height = ph + 'px';
+        bgLayer.appendChild(canvas);
+        renderCtx = canvas.getContext('2d');
+        renderCtx.scale(devicePixelRatio, devicePixelRatio);
+      }
       allChips.forEach(chip => {
-        ctx.save();
-        ctx.translate(chip.cx, chip.cy);
-        _drawChip(ctx, chip);
-        ctx.restore();
+        renderCtx.save();
+        renderCtx.translate(chip.cx, chip.cy);
+        _drawChip(renderCtx, chip);
+        renderCtx.restore();
       });
 
     // ── Phase 2b: Bounce — slide in from left, word by word ──
@@ -2366,8 +2374,21 @@ const bgSize    = document.getElementById('bgSize');
     if (!transpBg) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, pw, ph); }
     // Photo background
     await _drawPhotoBgToCtx(ctx, pw, ph);
-    // Chip text layer (current visual state — final frame for static)
-    _compositeChips(ctx, page);
+
+    // Chip text layer — re-render directly at 4K so text/shapes are vector-sharp.
+    // exportCtx is pre-scaled by scale4k, so all canvas drawing commands
+    // (text, shapes, fills) naturally produce crisp 4K output.
+    const _rawText  = document.getElementById('bgInput').value.trim();
+    const _fontSize = parseInt(document.getElementById('bgSize').value);
+    if (_rawText) {
+      if (mode !== 'overlay' && chipStyle !== 'postit') {
+        // Main chip path: re-render from scratch at full resolution
+        await renderChips(_rawText, 0.92, _fontSize, ctx);
+      } else {
+        // Overlay/post-it: composite existing screen canvases (bitmap upscale fallback)
+        _compositeChips(ctx, page);
+      }
+    }
 
     out.toBlob(blob => {
       const url = URL.createObjectURL(blob);
