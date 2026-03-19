@@ -2407,12 +2407,9 @@ const bgSize    = document.getElementById('bgSize');
     const pw   = page.offsetWidth;
     const ph   = page.offsetHeight;
     const FPS  = 30;
-    // Scale to 4K (target 3840px on longest side)
-    const TARGET_PX  = 3840;
-    const scale4k    = Math.max(Math.ceil(TARGET_PX / Math.max(pw, ph)), 2);
-    // H.264 requires even dimensions
-    const encW = (pw * scale4k) % 2 === 0 ? pw * scale4k : pw * scale4k + 1;
-    const encH = (ph * scale4k) % 2 === 0 ? ph * scale4k : ph * scale4k + 1;
+    // Target 4K on longest side; chips always render at this scale for sharpness
+    const TARGET_PX = 3840;
+    const maxScale  = Math.max(Math.ceil(TARGET_PX / Math.max(pw, ph)), 2);
 
     const saveBtn   = document.getElementById('saveBtn');
     const origLabel = saveBtn.textContent;
@@ -2455,11 +2452,47 @@ const bgSize    = document.getElementById('bgSize');
       }
     }
 
+    // 1c. Find best WebCodecs codec + scale (try 4K → 2K → 1× until one works)
+    // H.264 levels: 6.x supports 8K+, 5.1/5.2 support 4K 16:9, 4.0 supports 1080p.
+    // For square canvases >3072px we need Level 6.0+.
+    const _allCodecs = [
+      'avc1.64003E', 'avc1.64003C',          // High Profile Level 6.2 / 6.0 (~8K+)
+      'avc1.640034', 'avc1.640033',          // High Profile Level 5.2 / 5.1 (~4K 16:9)
+      'avc1.640028', 'avc1.4D0028', 'avc1.420028', // Level 4.0 (~1080p)
+      'avc1.4D001F', 'avc1.42001F',          // Level 3.1 (~720p)
+    ];
+    let chosenCodec = null, encScale = maxScale;
+    if (Muxer) {
+      const scalesToTry = [];
+      for (let s = maxScale; s >= 1; s = s <= 2 ? 1 : Math.floor(s / 2)) {
+        scalesToTry.push(s);
+        if (s === 1) break;
+      }
+      outer:
+      for (const sc of scalesToTry) {
+        const tw = (pw * sc) % 2 === 0 ? pw * sc : pw * sc + 1;
+        const th = (ph * sc) % 2 === 0 ? ph * sc : ph * sc + 1;
+        for (const c of _allCodecs) {
+          try {
+            const sup = await VideoEncoder.isConfigSupported({
+              codec: c, width: tw, height: th, bitrate: 5_000_000, framerate: FPS,
+            });
+            if (sup.supported) { chosenCodec = c; encScale = sc; break outer; }
+          } catch(_) {}
+        }
+      }
+      console.log('[saveAsVideo] WebCodecs codec:', chosenCodec || 'none', 'scale:', encScale);
+    }
+
+    // Final encoder dimensions for WebCodecs path
+    const encW = (pw * encScale) % 2 === 0 ? pw * encScale : pw * encScale + 1;
+    const encH = (ph * encScale) % 2 === 0 ? ph * encScale : ph * encScale + 1;
+
     // ══════════════════════════════════════════════════════════
-    // PHASE 2: Restart animations NOW (all async loading done)
+    // PHASE 2: Restart animations (chip canvases at maxScale for sharpness)
     // ══════════════════════════════════════════════════════════
     saveBtn.textContent = '⏺ Recording…';
-    _chipRenderScale = scale4k;   // chips now render at 4K resolution in _makeMiniCanvas
+    _chipRenderScale = maxScale;   // all chip canvases rendered at max quality
     await renderBg();
 
     // ── Compute total animation duration from freshly created DOM elements ──
@@ -2479,46 +2512,37 @@ const bgSize    = document.getElementById('bgSize');
     });
     const totalDurationMs = maxEndMs + 800; // hold 800 ms on final frame
 
-    // ── Recording canvas (4K) ──
-    const rec  = document.createElement('canvas');
-    rec.width  = encW; rec.height = encH;
-    const rCtx = rec.getContext('2d');
-    // Scale coordinate system to CSS pixels so _compositeChips (which uses
-    // getBoundingClientRect values) maps 1:1 to our 4K canvas pixels.
-    rCtx.scale(scale4k, scale4k);
-    const recCssW = encW / scale4k;   // CSS-pixel width  (≈ pw)
-    const recCssH = encH / scale4k;   // CSS-pixel height (≈ ph)
-
-    function drawRecFrame() {
-      rCtx.fillStyle = '#fff';
-      rCtx.fillRect(0, 0, recCssW, recCssH);
-      if (photoBgImg) {
-        const s  = Math.max(recCssW / photoBgImg.naturalWidth, recCssH / photoBgImg.naturalHeight);
-        const sw = photoBgImg.naturalWidth * s, sh = photoBgImg.naturalHeight * s;
-        rCtx.drawImage(photoBgImg, (recCssW - sw) / 2, (recCssH - sh) / 2, sw, sh);
-      }
-      _compositeChips(rCtx, page);
+    // ── Helper: make a recording canvas at the given pixel scale ──
+    function _makeRecCanvas(scale) {
+      const w   = (pw * scale) % 2 === 0 ? pw * scale : pw * scale + 1;
+      const h   = (ph * scale) % 2 === 0 ? ph * scale : ph * scale + 1;
+      const cv  = document.createElement('canvas');
+      cv.width  = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      // Pre-scale so all drawing uses CSS-pixel coordinates (getBoundingClientRect values)
+      ctx.scale(scale, scale);
+      const cssW = w / scale, cssH = h / scale;
+      const draw = () => {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, cssW, cssH);
+        if (photoBgImg) {
+          const s  = Math.max(cssW / photoBgImg.naturalWidth, cssH / photoBgImg.naturalHeight);
+          const sw = photoBgImg.naturalWidth * s, sh = photoBgImg.naturalHeight * s;
+          ctx.drawImage(photoBgImg, (cssW - sw) / 2, (cssH - sh) / 2, sw, sh);
+        }
+        _compositeChips(ctx, page);
+      };
+      return { cv, ctx, w, h, draw };
     }
 
     // ══════════════════════════════════════════════════════════
     // PHASE 3: Record — PATH A: WebCodecs + mp4-muxer → .mp4
     // ══════════════════════════════════════════════════════════
-    if (Muxer) {
-      // Find a supported H.264 codec string
-      const codecCandidates = ['avc1.640028', 'avc1.4D001F', 'avc1.42001F', 'avc1.420034'];
-      let chosenCodec = null;
-      for (const codec of codecCandidates) {
-        try {
-          const support = await VideoEncoder.isConfigSupported({
-            codec, width: encW, height: encH, bitrate: 3_500_000, framerate: FPS,
-          });
-          if (support.supported) { chosenCodec = codec; break; }
-        } catch(_) {}
-      }
+    if (chosenCodec) {
+      const { cv: rec, draw: drawRecFrame } = _makeRecCanvas(encScale);
 
       let muxerTarget, muxer, encoder, encErr = null;
       try {
-        if (!chosenCodec) throw new Error('H.264 encoding is not supported in this browser. Try Chrome or Edge.');
         muxerTarget = new ArrayBufferTarget();
         muxer = new Muxer({
           target:                muxerTarget,
@@ -2597,10 +2621,14 @@ const bgSize    = document.getElementById('bgSize');
 
     // ══════════════════════════════════════════════════════════
     // PHASE 3 fallback — PATH B: MediaRecorder → .mp4 or .webm
+    // Uses a 2× canvas (reliable with captureStream; chips still
+    // look sharp because _chipRenderScale = maxScale).
     // ══════════════════════════════════════════════════════════
+    const mrScale = Math.min(2, maxScale);
+    const { cv: mrCanvas, draw: drawRecFrame } = _makeRecCanvas(mrScale);
     let stream, recorder, chunks = [];
     try {
-      stream = rec.captureStream(FPS);
+      stream = mrCanvas.captureStream(FPS);
     } catch(e) {
       _restore(e); return;
     }
