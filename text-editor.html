@@ -2376,110 +2376,173 @@ const bgSize    = document.getElementById('bgSize');
     }, 'image/png');
   }
 
-  /* ── Save as Video (WebM) ── */
+  /* ── Save as Video (MP4) ── */
   async function saveAsVideo() {
-    const page = document.getElementById('page');
-    const pw   = page.offsetWidth;
-    const ph   = page.offsetHeight;
-    const FPS  = 30;
+    const page     = document.getElementById('page');
+    const pw       = page.offsetWidth;
+    const ph       = page.offsetHeight;
+    const FPS      = 30;
+    // H.264 requires even dimensions
+    const encW     = pw % 2 === 0 ? pw : pw + 1;
+    const encH     = ph % 2 === 0 ? ph : ph + 1;
 
-    // Recording canvas (CSS pixels — no DPR scaling for captureStream)
-    const rec    = document.createElement('canvas');
-    rec.width    = pw;
-    rec.height   = ph;
-    const rCtx   = rec.getContext('2d');
+    const saveBtn  = document.getElementById('saveBtn');
+    const origLabel = saveBtn.textContent;
+    const _restore  = () => { saveBtn.textContent = origLabel; saveBtn.disabled = false; };
 
-    // Compute total animation duration from current wrapper animations
-    const parseDurStr = s => {
-      if (!s || s === 'none') return 0;
-      const parts = s.split(',').map(p => p.trim());
-      // take the last value (some browsers list multiple)
-      const val = parts[parts.length - 1];
-      return val.endsWith('ms') ? parseFloat(val) : parseFloat(val) * 1000;
-    };
-    let maxEndMs = 500;
-    document.querySelectorAll('#bgLayer > div').forEach(wrapper => {
-      const cs    = getComputedStyle(wrapper);
-      const dur   = parseDurStr(cs.animationDuration);
-      const delay = parseDurStr(cs.animationDelay);
-      maxEndMs = Math.max(maxEndMs, delay + dur);
-      wrapper.querySelectorAll('div').forEach(p => {
-        const ps  = getComputedStyle(p);
-        maxEndMs  = Math.max(maxEndMs, parseDurStr(ps.animationDelay) + parseDurStr(ps.animationDuration));
-      });
-    });
-    const totalDurationMs = maxEndMs + 700; // +700 ms hold at end
-
-    // Set up MediaRecorder
-    let stream, recorder, chunks = [];
-    try { stream = rec.captureStream(FPS); }
-    catch(e) { alert('Video export is not supported in this browser.'); return; }
-
-    const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
-      .find(t => MediaRecorder.isTypeSupported(t)) || '';
-    try { recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {}); }
-    catch(e) { alert('Video export is not supported in this browser.'); return; }
-
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = 'text-animation.webm';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    };
-
-    // Show recording indicator on save button
-    const saveBtn    = document.getElementById('saveBtn');
-    const origLabel  = saveBtn.textContent;
     saveBtn.textContent = '⏺ Recording…';
     saveBtn.disabled    = true;
 
-    // Pre-load photo background image
+    // ── Pre-load photo background ──
     let photoBgImg = null;
-    const bgStyle  = document.getElementById('photoBg').style.backgroundImage;
+    const bgStyle = document.getElementById('photoBg').style.backgroundImage;
     if (bgStyle && bgStyle !== 'none') {
-      const match = bgStyle.match(/url\(["']?([^"')]+)["']?\)/);
-      if (match) photoBgImg = await new Promise(resolve => {
+      const m = bgStyle.match(/url\(["']?([^"')]+)["']?\)/);
+      if (m) photoBgImg = await new Promise(resolve => {
         const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = match[1];
+        img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = m[1];
       });
     }
 
-    recorder.start(100);
-    const startTime = performance.now();
+    // ── Restart animations fresh so the video captures them from the start ──
+    await renderBg();
+    // Two rAF waits: let the browser apply the first animation frame before we measure
+    await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => requestAnimationFrame(r));
 
-    function drawFrame() {
-      const elapsed = performance.now() - startTime;
+    // ── Compute total animation duration from the newly created DOM elements ──
+    const parseDur = s => {
+      if (!s || s === 'none') return 0;
+      const v = s.split(',').at(-1).trim();
+      return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000;
+    };
+    let maxEndMs = 600;
+    document.querySelectorAll('#bgLayer > div').forEach(w => {
+      const cs = getComputedStyle(w);
+      maxEndMs = Math.max(maxEndMs, parseDur(cs.animationDelay) + parseDur(cs.animationDuration));
+      w.querySelectorAll('div').forEach(p => {
+        const ps = getComputedStyle(p);
+        maxEndMs = Math.max(maxEndMs, parseDur(ps.animationDelay) + parseDur(ps.animationDuration));
+      });
+    });
+    // Add 700 ms hold at the end so the final state is visible
+    const totalDurationMs = maxEndMs + 700;
 
-      // White base
+    // ── Recording canvas ──
+    const rec  = document.createElement('canvas');
+    rec.width  = encW; rec.height = encH;
+    const rCtx = rec.getContext('2d');
+
+    function drawRecFrame() {
       rCtx.fillStyle = '#fff';
-      rCtx.fillRect(0, 0, pw, ph);
-
-      // Photo background
+      rCtx.fillRect(0, 0, encW, encH);
       if (photoBgImg) {
-        const scale = Math.max(pw / photoBgImg.naturalWidth, ph / photoBgImg.naturalHeight);
-        const sw = photoBgImg.naturalWidth * scale, sh = photoBgImg.naturalHeight * scale;
-        rCtx.drawImage(photoBgImg, (pw - sw) / 2, (ph - sh) / 2, sw, sh);
+        const s = Math.max(encW / photoBgImg.naturalWidth, encH / photoBgImg.naturalHeight);
+        const sw = photoBgImg.naturalWidth * s, sh = photoBgImg.naturalHeight * s;
+        rCtx.drawImage(photoBgImg, (encW - sw) / 2, (encH - sh) / 2, sw, sh);
       }
-
-      // Chip layer (reads live DOM state each frame)
       _compositeChips(rCtx, page);
+    }
 
-      if (elapsed < totalDurationMs) {
-        requestAnimationFrame(drawFrame);
-      } else {
-        recorder.stop();
-        stream.getTracks().forEach(t => t.stop());
-        saveBtn.textContent = origLabel;
-        saveBtn.disabled    = false;
+    // ══════════════════════════════════════════════════════════
+    // PATH A: WebCodecs + mp4-muxer  →  proper .mp4
+    // ══════════════════════════════════════════════════════════
+    if (window.VideoEncoder) {
+      let Muxer, ArrayBufferTarget;
+      try {
+        ({ Muxer, ArrayBufferTarget } =
+          await import('https://cdn.jsdelivr.net/npm/mp4-muxer/build/mp4-muxer.mjs'));
+      } catch(_) { Muxer = null; }
+
+      if (Muxer) {
+        const target = new ArrayBufferTarget();
+        const muxer  = new Muxer({
+          target,
+          video: { codec: 'avc', width: encW, height: encH },
+          fastStart: 'in-memory',
+        });
+
+        let encErr = null;
+        const encoder = new VideoEncoder({
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+          error:  e => { encErr = e; },
+        });
+        try {
+          encoder.configure({
+            codec:     'avc1.4D0028',   // H.264 Main Profile Level 4.0
+            width:     encW,
+            height:    encH,
+            bitrate:   4_000_000,
+            framerate: FPS,
+          });
+        } catch(e) { encErr = e; }
+
+        if (!encErr) {
+          // Animations were restarted above — record from now
+          const startTime = performance.now();
+          let frameIdx = 0;
+
+          const encodeNext = () => {
+            const elapsed   = performance.now() - startTime;
+            const timestamp = Math.round(elapsed * 1000); // µs
+
+            drawRecFrame();
+            const vf = new VideoFrame(rec, { timestamp });
+            encoder.encode(vf, { keyFrame: frameIdx % (FPS * 2) === 0 });
+            vf.close();
+            frameIdx++;
+
+            if (elapsed < totalDurationMs && !encErr) {
+              requestAnimationFrame(encodeNext);
+            } else {
+              encoder.flush().then(() => {
+                muxer.finalize();
+                const blob = new Blob([target.buffer], { type: 'video/mp4' });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href = url; a.download = 'text-animation.mp4'; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                _restore();
+              }).catch(e => { console.error('MP4 flush error', e); _restore(); });
+            }
+          };
+          requestAnimationFrame(encodeNext);
+          return; // done — WebCodecs path handles everything
+        }
       }
     }
-    requestAnimationFrame(drawFrame);
+
+    // ══════════════════════════════════════════════════════════
+    // PATH B: MediaRecorder fallback  →  native MP4 (Safari) or WebM
+    // ══════════════════════════════════════════════════════════
+    let stream, recorder, chunks = [];
+    try { stream = rec.captureStream(FPS); }
+    catch(e) { alert('Video export is not supported in this browser.'); _restore(); return; }
+
+    const mime = ['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {}); }
+    catch(e) { alert('Video export is not supported in this browser.'); _restore(); return; }
+
+    const isMp4 = mime.startsWith('video/mp4');
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: recorder.mimeType || mime });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = isMp4 ? 'text-animation.mp4' : 'text-animation.webm';
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      _restore();
+    };
+
+    recorder.start(100);
+    const recStart = performance.now();
+    const recLoop  = () => {
+      drawRecFrame();
+      if (performance.now() - recStart < totalDurationMs) requestAnimationFrame(recLoop);
+      else { recorder.stop(); stream.getTracks().forEach(t => t.stop()); }
+    };
+    requestAnimationFrame(recLoop);
   }
 
   /* ── Word / char count ── */
