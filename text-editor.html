@@ -2334,19 +2334,22 @@ const bgSize    = document.getElementById('bgSize');
     }
   }
 
-  /* ── Save as PNG image (Save button) ── */
+  /* ── Save as PNG image — 4K output (Save button) ── */
   async function saveAsImage() {
-    const page      = document.getElementById('page');
-    const pw        = page.offsetWidth;
-    const ph        = page.offsetHeight;
-    const dpr       = Math.min(devicePixelRatio, 3);
-    const transpBg  = document.getElementById('transparentBgToggle')?.checked;
+    const page     = document.getElementById('page');
+    const pw       = page.offsetWidth;
+    const ph       = page.offsetHeight;
+    const transpBg = document.getElementById('transparentBgToggle')?.checked;
+
+    // Target 4K: scale up to whichever multiplier fills ~3840px on the longest side
+    const TARGET_PX = 3840;
+    const scale4k   = Math.max(Math.ceil(TARGET_PX / Math.max(pw, ph)), devicePixelRatio, 2);
 
     const out  = document.createElement('canvas');
-    out.width  = pw * dpr;
-    out.height = ph * dpr;
+    out.width  = pw * scale4k;
+    out.height = ph * scale4k;
     const ctx  = out.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.scale(scale4k, scale4k);
 
     // Rounded-corner clip (matches .page border-radius: 16px)
     const rad = 16;
@@ -2376,47 +2379,69 @@ const bgSize    = document.getElementById('bgSize');
     }, 'image/png');
   }
 
-  /* ── Save as Video (MP4) ── */
+  /* ── Save as Video (MP4 via WebCodecs, or WebM fallback) ── */
   async function saveAsVideo() {
-    const page     = document.getElementById('page');
-    const pw       = page.offsetWidth;
-    const ph       = page.offsetHeight;
-    const FPS      = 30;
+    const page = document.getElementById('page');
+    const pw   = page.offsetWidth;
+    const ph   = page.offsetHeight;
+    const FPS  = 30;
     // H.264 requires even dimensions
-    const encW     = pw % 2 === 0 ? pw : pw + 1;
-    const encH     = ph % 2 === 0 ? ph : ph + 1;
+    const encW = pw % 2 === 0 ? pw : pw + 1;
+    const encH = ph % 2 === 0 ? ph : ph + 1;
 
-    const saveBtn  = document.getElementById('saveBtn');
+    const saveBtn   = document.getElementById('saveBtn');
     const origLabel = saveBtn.textContent;
-    const _restore  = () => { saveBtn.textContent = origLabel; saveBtn.disabled = false; };
+    const _restore  = (err) => {
+      saveBtn.textContent = origLabel;
+      saveBtn.disabled    = false;
+      if (err) { console.error('[saveAsVideo]', err); alert('Video export failed. Check console for details.'); }
+    };
 
-    saveBtn.textContent = '⏺ Recording…';
+    saveBtn.textContent = '⏺ Loading…';
     saveBtn.disabled    = true;
 
-    // ── Pre-load photo background ──
+    // ══════════════════════════════════════════════════════════
+    // PHASE 1: Load all async resources BEFORE touching animations
+    // ══════════════════════════════════════════════════════════
+
+    // 1a. Photo background
     let photoBgImg = null;
-    const bgStyle = document.getElementById('photoBg').style.backgroundImage;
-    if (bgStyle && bgStyle !== 'none') {
-      const m = bgStyle.match(/url\(["']?([^"')]+)["']?\)/);
-      if (m) photoBgImg = await new Promise(resolve => {
+    const bgStyleStr = document.getElementById('photoBg').style.backgroundImage;
+    if (bgStyleStr && bgStyleStr !== 'none') {
+      const m = bgStyleStr.match(/url\(["']?([^"')]+)["']?\)/);
+      if (m) photoBgImg = await new Promise(r => {
         const img = new Image();
-        img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = m[1];
+        img.onload = () => r(img); img.onerror = () => r(null); img.src = m[1];
       });
     }
 
-    // ── Restart animations fresh so the video captures them from the start ──
-    await renderBg();
-    // Two rAF waits: let the browser apply the first animation frame before we measure
-    await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => requestAnimationFrame(r));
+    // 1b. mp4-muxer CDN (only if VideoEncoder available)
+    let Muxer = null, ArrayBufferTarget = null;
+    if (window.VideoEncoder) {
+      try {
+        const mod = await Promise.race([
+          import('https://cdn.jsdelivr.net/npm/mp4-muxer/build/mp4-muxer.mjs'),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('CDN timeout after 5s')), 5000)),
+        ]);
+        ({ Muxer, ArrayBufferTarget } = mod);
+      } catch(e) {
+        console.warn('[saveAsVideo] mp4-muxer load failed, falling back to MediaRecorder:', e.message);
+      }
+    }
 
-    // ── Compute total animation duration from the newly created DOM elements ──
+    // ══════════════════════════════════════════════════════════
+    // PHASE 2: Restart animations NOW (all async loading done)
+    // ══════════════════════════════════════════════════════════
+    saveBtn.textContent = '⏺ Recording…';
+    await renderBg();
+
+    // ── Compute total animation duration from freshly created DOM elements ──
     const parseDur = s => {
       if (!s || s === 'none') return 0;
       const v = s.split(',').at(-1).trim();
       return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000;
     };
-    let maxEndMs = 600;
+    let maxEndMs = 800;
     document.querySelectorAll('#bgLayer > div').forEach(w => {
       const cs = getComputedStyle(w);
       maxEndMs = Math.max(maxEndMs, parseDur(cs.animationDelay) + parseDur(cs.animationDuration));
@@ -2425,8 +2450,7 @@ const bgSize    = document.getElementById('bgSize');
         maxEndMs = Math.max(maxEndMs, parseDur(ps.animationDelay) + parseDur(ps.animationDuration));
       });
     });
-    // Add 700 ms hold at the end so the final state is visible
-    const totalDurationMs = maxEndMs + 700;
+    const totalDurationMs = maxEndMs + 800; // hold 800 ms on final frame
 
     // ── Recording canvas ──
     const rec  = document.createElement('canvas');
@@ -2437,7 +2461,7 @@ const bgSize    = document.getElementById('bgSize');
       rCtx.fillStyle = '#fff';
       rCtx.fillRect(0, 0, encW, encH);
       if (photoBgImg) {
-        const s = Math.max(encW / photoBgImg.naturalWidth, encH / photoBgImg.naturalHeight);
+        const s  = Math.max(encW / photoBgImg.naturalWidth, encH / photoBgImg.naturalHeight);
         const sw = photoBgImg.naturalWidth * s, sh = photoBgImg.naturalHeight * s;
         rCtx.drawImage(photoBgImg, (encW - sw) / 2, (encH - sh) / 2, sw, sh);
       }
@@ -2445,91 +2469,99 @@ const bgSize    = document.getElementById('bgSize');
     }
 
     // ══════════════════════════════════════════════════════════
-    // PATH A: WebCodecs + mp4-muxer  →  proper .mp4
+    // PHASE 3: Record — PATH A: WebCodecs + mp4-muxer → .mp4
     // ══════════════════════════════════════════════════════════
-    if (window.VideoEncoder) {
-      let Muxer, ArrayBufferTarget;
+    if (Muxer) {
+      let muxerTarget, muxer, encoder, encErr = null;
       try {
-        ({ Muxer, ArrayBufferTarget } =
-          await import('https://cdn.jsdelivr.net/npm/mp4-muxer/build/mp4-muxer.mjs'));
-      } catch(_) { Muxer = null; }
-
-      if (Muxer) {
-        const target = new ArrayBufferTarget();
-        const muxer  = new Muxer({
-          target,
-          video: { codec: 'avc', width: encW, height: encH },
+        muxerTarget = new ArrayBufferTarget();
+        muxer = new Muxer({
+          target:    muxerTarget,
+          video:     { codec: 'avc', width: encW, height: encH },
           fastStart: 'in-memory',
         });
-
-        let encErr = null;
-        const encoder = new VideoEncoder({
+        encoder = new VideoEncoder({
           output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
           error:  e => { encErr = e; },
         });
-        try {
-          encoder.configure({
-            codec:     'avc1.4D0028',   // H.264 Main Profile Level 4.0
-            width:     encW,
-            height:    encH,
-            bitrate:   4_000_000,
-            framerate: FPS,
-          });
-        } catch(e) { encErr = e; }
+        encoder.configure({
+          codec:     'avc1.42001F',   // H.264 Baseline Profile Level 3.1
+          width:     encW,
+          height:    encH,
+          bitrate:   3_500_000,
+          framerate: FPS,
+        });
+      } catch(e) {
+        encErr = e;
+      }
 
-        if (!encErr) {
-          // Animations were restarted above — record from now
-          const startTime = performance.now();
-          let frameIdx = 0;
+      if (!encErr) {
+        const startTime = performance.now();
+        let frameIdx = 0;
 
-          const encodeNext = () => {
-            const elapsed   = performance.now() - startTime;
-            const timestamp = Math.round(elapsed * 1000); // µs
+        function encodeNext() {
+          if (encErr) { _restore(encErr); return; }
 
-            drawRecFrame();
+          const elapsed   = performance.now() - startTime;
+          const timestamp = Math.round(elapsed * 1000); // µs for VideoFrame
+
+          drawRecFrame();
+          try {
             const vf = new VideoFrame(rec, { timestamp });
             encoder.encode(vf, { keyFrame: frameIdx % (FPS * 2) === 0 });
             vf.close();
-            frameIdx++;
+          } catch(e) { _restore(e); return; }
+          frameIdx++;
 
-            if (elapsed < totalDurationMs && !encErr) {
-              requestAnimationFrame(encodeNext);
-            } else {
-              encoder.flush().then(() => {
+          if (elapsed < totalDurationMs) {
+            requestAnimationFrame(encodeNext);
+          } else {
+            encoder.flush()
+              .then(() => {
                 muxer.finalize();
-                const blob = new Blob([target.buffer], { type: 'video/mp4' });
+                const blob = new Blob([muxerTarget.buffer], { type: 'video/mp4' });
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement('a');
                 a.href = url; a.download = 'text-animation.mp4'; a.click();
                 setTimeout(() => URL.revokeObjectURL(url), 5000);
                 _restore();
-              }).catch(e => { console.error('MP4 flush error', e); _restore(); });
-            }
-          };
-          requestAnimationFrame(encodeNext);
-          return; // done — WebCodecs path handles everything
+              })
+              .catch(e => _restore(e));
+          }
         }
+        requestAnimationFrame(encodeNext); // start immediately after renderBg
+        return;
       }
+      console.warn('[saveAsVideo] WebCodecs setup failed, falling back to MediaRecorder:', encErr);
     }
 
     // ══════════════════════════════════════════════════════════
-    // PATH B: MediaRecorder fallback  →  native MP4 (Safari) or WebM
+    // PHASE 3 fallback — PATH B: MediaRecorder → .mp4 or .webm
     // ══════════════════════════════════════════════════════════
     let stream, recorder, chunks = [];
-    try { stream = rec.captureStream(FPS); }
-    catch(e) { alert('Video export is not supported in this browser.'); _restore(); return; }
+    try {
+      stream = rec.captureStream(FPS);
+    } catch(e) {
+      _restore(e); return;
+    }
 
-    const mime = ['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm']
-      .find(t => MediaRecorder.isTypeSupported(t)) || '';
-    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {}); }
-    catch(e) { alert('Video export is not supported in this browser.'); _restore(); return; }
+    const mime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+      .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch(_) { return false; } }) || '';
 
-    const isMp4 = mime.startsWith('video/mp4');
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: recorder.mimeType || mime });
+    try {
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+    } catch(e) {
+      _restore(e); return;
+    }
+
+    recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    recorder.onerror = e => _restore(e);
+    recorder.onstop  = () => {
+      if (!chunks.length) { _restore(new Error('No video data was captured')); return; }
+      const blob = new Blob(chunks, { type: recorder.mimeType || mime || 'video/webm' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
+      const isMp4 = (recorder.mimeType || mime).startsWith('video/mp4');
       a.href = url; a.download = isMp4 ? 'text-animation.mp4' : 'text-animation.webm';
       a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
       _restore();
@@ -2537,12 +2569,16 @@ const bgSize    = document.getElementById('bgSize');
 
     recorder.start(100);
     const recStart = performance.now();
-    const recLoop  = () => {
+    function recLoop() {
       drawRecFrame();
-      if (performance.now() - recStart < totalDurationMs) requestAnimationFrame(recLoop);
-      else { recorder.stop(); stream.getTracks().forEach(t => t.stop()); }
-    };
-    requestAnimationFrame(recLoop);
+      if (performance.now() - recStart < totalDurationMs) {
+        requestAnimationFrame(recLoop);
+      } else {
+        recorder.stop();
+        stream.getTracks().forEach(t => t.stop());
+      }
+    }
+    requestAnimationFrame(recLoop); // start immediately after renderBg
   }
 
   /* ── Word / char count ── */
