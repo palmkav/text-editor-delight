@@ -2515,7 +2515,7 @@ const bgSize    = document.getElementById('bgSize');
           fastStart: 'in-memory',
         });
         encoder = new VideoEncoder({
-          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta ?? {}),
           error:  e => { encErr = e; },
         });
         encoder.configure({
@@ -2543,7 +2543,7 @@ const bgSize    = document.getElementById('bgSize');
 
           drawRecFrame();
           try {
-            const vf = new VideoFrame(rec, { timestamp });
+            const vf = new VideoFrame(rec, { timestamp, colorSpace: 'srgb' });
             encoder.encode(vf, { keyFrame: frameIdx % (FPS * 2) === 0 });
             vf.close();
           } catch(e) { _restore(e); return; }
